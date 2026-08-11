@@ -2,7 +2,7 @@
   "name": "diff-next",
   "displayName": "vscode-diff Next",
   "description": "Compare Git branches or two workspace repos in VS Code: dual targets, file tree, commit history (same-repo), built-in diffs.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "RicardoFrantz",
   "license": "MIT",
   "icon": "icon.png",
@@ -37,10 +37,6 @@
     "vscode-diff",
     "diff-next"
   ],
-  "activationEvents": [
-    "onView:diff-next.panel",
-    "onCommand:diff-next.compare"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -73,7 +69,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint src --ext ts",
+    "lint": "eslint src",
     "package": "vsce package",
     "smoke:paths": "node scripts/smoke-paths.js",
     "update": "node -e \"const {spawnSync}=require('child_process');const w=process.platform==='win32';const r=spawnSync(w?'powershell': 'bash',[...(w?['-NoProfile','-ExecutionPolicy','Bypass','-File','./update-extension.ps1']:['./update-extension.sh'])],{stdio:'inherit'});process.exit(r.status??1)\"",
@@ -81,11 +77,13 @@
     "update:dev": "node -e \"const {spawnSync}=require('child_process');const w=process.platform==='win32';const r=spawnSync(w?'powershell':'bash',[...(w?['-NoProfile','-ExecutionPolicy','Bypass','-File','./update-extension.ps1','-DevHost']:['./update-extension.sh','--dev-host'])],{stdio:'inherit'});process.exit(r.status??1)\""
   },
   "devDependencies": {
+    "@eslint/js": "^9.x",
     "@types/node": "^20.x",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^6.x",
-    "@typescript-eslint/parser": "^6.x",
-    "eslint": "^8.x",
+    "@typescript-eslint/eslint-plugin": "^8.x",
+    "@typescript-eslint/parser": "^8.x",
+    "eslint": "^9.x",
+    "globals": "^15.x",
     "typescript": "^5.x"
   },
   "dependencies": {

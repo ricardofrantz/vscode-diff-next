@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-INJECT_NONCE';">
   <title>vscode-diff Next</title>
   <style>/* INJECT_CSS */</style>
 </head>
@@ -34,7 +34,7 @@
             <span id="compareContext" class="compare-context"></span>
           </div>
           <div class="header-tools" id="headerTools">
-            <div class="font-size-tools" title="List font size" onclick="event.stopPropagation()">
+            <div class="font-size-tools" id="fontSizeTools" title="List font size">
               <button type="button" id="fontMinus" class="font-btn" aria-label="Smaller list font">−</button>
               <span id="fontSizeLabel" class="font-size-label">12</span>
               <button type="button" id="fontPlus" class="font-btn" aria-label="Larger list font">+</button>
@@ -70,6 +70,6 @@
     </div>
   </div>
 
-  <script>/* INJECT_JS */</script>
+  <script nonce="INJECT_NONCE">/* INJECT_JS */</script>
 </body>
 </html>

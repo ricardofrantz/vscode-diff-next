@@ -166,6 +166,10 @@ function init() {
       bumpListFont(1);
     });
   }
+  const fontTools = document.getElementById('fontSizeTools');
+  if (fontTools) {
+    fontTools.addEventListener('click', (e) => e.stopPropagation());
+  }
   applyListFontSize();
 
   ensureCommitsCollapsed();
@@ -389,7 +393,6 @@ function onSwapSides() {
 }
 
 let loadDiffTimer = null;
-let loadDiffSeq = 0;
 
 function loadDiff() {
   if (!state.root1 || !state.root2 || !state.ref1 || !state.ref2) {
@@ -417,7 +420,6 @@ function runLoadDiff(key) {
   if (nowKey !== key) {
     return;
   }
-  const seq = ++loadDiffSeq;
   fileTree.innerHTML = '<div class="loading">Loading changes...</div>';
   ensureCommitsCollapsed();
   updateCommitsTitle();
@@ -431,7 +433,6 @@ function runLoadDiff(key) {
     commitList.innerHTML =
       '<div class="empty-state">Commit history needs the same repository on both targets</div>';
   }
-  void seq;
 }
 
 function onRefresh() {
@@ -491,11 +492,13 @@ function selectPath(filePath, openDiff) {
   }
   if (openDiff) {
     const status = (row && row.dataset.status) || statusForPath(filePath);
+    const hit = (state.diffFiles || []).find((f) => f.path === filePath);
     vscode.postMessage(
       targetsPayload({
         command: 'openDiff',
         filePath,
         status,
+        oldPath: (row && row.dataset.oldPath) || (hit && hit.oldPath) || '',
       })
     );
   }
@@ -811,6 +814,9 @@ function renderFileTree(files, totalStats, isRestore = false, meta) {
     row.className = `scm-resource status-${file.status}`;
     row.dataset.path = file.path;
     row.dataset.status = file.status;
+    if (file.oldPath) {
+      row.dataset.oldPath = file.oldPath;
+    }
     row.dataset.type = 'file';
     row.setAttribute('role', 'option');
     const letter = STATUS_LETTER[file.status] || '?';
@@ -819,7 +825,9 @@ function renderFileTree(files, totalStats, isRestore = false, meta) {
         ? `U  ${file.path} (open Target 2 only)`
         : file.status === 'deleted'
           ? `D  ${file.path} (open Target 1 only)`
-          : `${letter}  ${file.path}`;
+          : file.oldPath
+            ? `${letter}  ${file.oldPath} → ${file.path}`
+            : `${letter}  ${file.path}`;
     if (file.path === state.selectedPath) {
       row.classList.add('selected');
     }
@@ -978,10 +986,17 @@ window.addEventListener('message', (event) => {
       updateCommitsTitle();
       saveState();
       break;
-    case 'error':
+    case 'error': {
       console.error(message.message);
-      fileTree.innerHTML = `<div class="empty-state">${message.message}</div>`;
+      // textContent: error strings can contain repo paths / git output —
+      // never parse them as HTML.
+      const div = document.createElement('div');
+      div.className = 'empty-state';
+      div.textContent = message.message;
+      fileTree.innerHTML = '';
+      fileTree.appendChild(div);
       break;
+    }
   }
 });
 

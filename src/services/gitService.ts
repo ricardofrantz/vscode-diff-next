@@ -87,6 +87,38 @@ export interface BranchList {
   current: string;
 }
 
+/**
+ * Ref names we accept from the webview / virtual-document URIs.
+ * Rejects option-like strings (leading '-') and characters git itself
+ * forbids in ref names, so a ref can never be parsed as a git flag.
+ */
+export function isSafeRef(ref: string): boolean {
+  if (!ref || ref.startsWith('-') || ref.endsWith('.lock')) {
+    return false;
+  }
+  if (ref.includes('..') || ref.includes('@{')) {
+    return false;
+  }
+  // Control chars, space, and git-forbidden ref characters.
+  // eslint-disable-next-line no-control-regex
+  return !/[\x00-\x1f\x7f ~^:?*[\\]/.test(ref);
+}
+
+/**
+ * Repo-relative paths we accept from the webview / virtual-document URIs.
+ * Rejects absolute paths, drive letters, and any '..' segment.
+ */
+export function isSafeRelPath(p: string): boolean {
+  if (!p || p.includes('\0')) {
+    return false;
+  }
+  const norm = p.replace(/\\/g, '/');
+  if (norm.startsWith('/') || /^[a-zA-Z]:/.test(norm) || norm.startsWith('-')) {
+    return false;
+  }
+  return !norm.split('/').some((seg) => seg === '..');
+}
+
 const STATUS_MAP: Record<string, FileStatus> = {
   A: 'added',
   M: 'modified',
@@ -290,6 +322,7 @@ export class GitService {
     const result = await this.git.raw([
       'log',
       `${baseBranch}..${targetBranch}`,
+      '--max-count=1000',
       '--format=%H%x1f%an%x1f%aI%x1f%s%x1f%b%x1e',
       '--',
     ]);
@@ -349,7 +382,10 @@ export class GitService {
     const exists = await this.pathExistsAt(sourceRef, filePath);
     if (!exists) {
       // File gone on source → remove from worktree if present.
-      const abs = path.join(this.workspaceRoot, filePath);
+      const abs = path.resolve(this.workspaceRoot, filePath);
+      if (!pathIsUnder(abs, this.workspaceRoot)) {
+        throw new Error(`Refusing to touch path outside repository: ${filePath}`);
+      }
       if (fs.existsSync(abs)) {
         fs.unlinkSync(abs);
       }
@@ -361,17 +397,17 @@ export class GitService {
   /**
    * Copy blob bytes from this repo's ref into an absolute worktree path
    * (cross-repo discard: Target 1 → Target 2 disk).
+   * Uses `cat-file blob` as a Buffer so binary files survive unchanged.
    */
   async writeBlobToAbsolutePath(
     ref: string,
     filePath: string,
     destAbsPath: string
   ): Promise<void> {
-    const content = await this.git.show([`${ref}:${filePath}`]);
+    const content = await this.git.binaryCatFile(['blob', `${ref}:${filePath}`]);
     const dir = path.dirname(destAbsPath);
     fs.mkdirSync(dir, { recursive: true });
-    // Buffer preserves binary-ish content better than string for most text; git show is utf8 for text.
-    fs.writeFileSync(destAbsPath, content, 'utf8');
+    fs.writeFileSync(destAbsPath, content);
   }
 
   /**
@@ -379,20 +415,20 @@ export class GitService {
    * Format: `git ls-tree -r <ref>` → `mode type hash\tpath`.
    */
   async listTreeBlobs(ref: string): Promise<Map<string, string>> {
-    const raw = await this.git.raw(['ls-tree', '-r', ref]);
+    // -z: NUL separators, no quoting of unusual/unicode paths.
+    const raw = await this.git.raw(['ls-tree', '-r', '-z', ref]);
     const map = new Map<string, string>();
-    for (const line of raw.split('\n')) {
-      const trimmed = line.trimEnd();
-      if (!trimmed) {
+    for (const entry of raw.split('\0')) {
+      if (!entry) {
         continue;
       }
-      // 100644 blob <hash>\t<path>  (hash may be space-padded from older git)
-      const tab = trimmed.indexOf('\t');
+      // 100644 blob <hash>\t<path>
+      const tab = entry.indexOf('\t');
       if (tab < 0) {
         continue;
       }
-      const meta = trimmed.slice(0, tab).trim().split(/\s+/);
-      const filePath = trimmed.slice(tab + 1);
+      const meta = entry.slice(0, tab).trim().split(/\s+/);
+      const filePath = entry.slice(tab + 1);
       const hash = meta[2];
       if (filePath && hash) {
         map.set(filePath, hash);
@@ -579,53 +615,84 @@ export class GitService {
     return out;
   }
 
+  /**
+   * NUL-separated (`-z`) so unusual/unicode paths arrive unquoted and
+   * rename records carry old and new path as separate tokens:
+   * `M\0path\0` · `R054\0old\0new\0`
+   */
   private async readNameStatus(
     base: string,
     target: string
   ): Promise<Map<string, { status: FileStatus; oldPath?: string }>> {
-    const raw = await this.git.raw(['diff', '--name-status', '-M', '-C', base, target]);
+    const raw = await this.git.raw(['diff', '--name-status', '-z', '-M', '-C', base, target]);
     const map = new Map<string, { status: FileStatus; oldPath?: string }>();
 
-    for (const line of raw.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) {
+    const tokens = raw.split('\0');
+    let i = 0;
+    while (i < tokens.length) {
+      const code = tokens[i];
+      if (!code) {
+        i += 1;
         continue;
       }
-      const parts = trimmed.split('\t');
-      const code = parts[0] ?? '';
       const letter = code.charAt(0);
       const status = STATUS_MAP[letter] ?? 'unknown';
-
-      if ((letter === 'R' || letter === 'C') && parts.length >= 3) {
-        map.set(parts[2], { status, oldPath: parts[1] });
-      } else if (parts.length >= 2) {
-        map.set(parts[1], { status });
+      if (letter === 'R' || letter === 'C') {
+        const oldPath = tokens[i + 1];
+        const newPath = tokens[i + 2];
+        if (newPath) {
+          map.set(newPath, { status, oldPath });
+        }
+        i += 3;
+      } else {
+        const filePath = tokens[i + 1];
+        if (filePath) {
+          map.set(filePath, { status });
+        }
+        i += 2;
       }
     }
 
     return map;
   }
 
+  /**
+   * `-z` records: `add\tdel\tpath\0`; renames use an empty path field
+   * followed by old and new path tokens: `add\tdel\t\0old\0new\0`.
+   */
   private async readNumstat(
     base: string,
     target: string
   ): Promise<Map<string, { additions: number; deletions: number }>> {
-    const raw = await this.git.raw(['diff', '--numstat', '-M', '-C', base, target]);
+    const raw = await this.git.raw(['diff', '--numstat', '-z', '-M', '-C', base, target]);
     const map = new Map<string, { additions: number; deletions: number }>();
 
-    for (const line of raw.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) {
+    const tokens = raw.split('\0');
+    let i = 0;
+    while (i < tokens.length) {
+      const record = tokens[i];
+      if (!record) {
+        i += 1;
         continue;
       }
-      const parts = trimmed.split('\t');
+      const parts = record.split('\t');
       if (parts.length < 3) {
+        i += 1;
         continue;
       }
       const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0;
       const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0;
-      const filePath = parts.length >= 4 ? parts[parts.length - 1] : parts[2];
-      map.set(filePath, { additions, deletions });
+      let filePath = parts[2];
+      if (!filePath) {
+        // Rename/copy: counts keyed on the new path.
+        filePath = tokens[i + 2] ?? '';
+        i += 3;
+      } else {
+        i += 1;
+      }
+      if (filePath) {
+        map.set(filePath, { additions, deletions });
+      }
     }
 
     return map;

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import {
   GitService,
   RepoInfo,
@@ -8,6 +9,8 @@ import {
   normalizeRoot,
   pathsEqual,
   pathIsUnder,
+  isSafeRef,
+  isSafeRelPath,
   PATH_CASE_INSENSITIVE,
   makeEndpointId,
 } from '../services/gitService';
@@ -59,8 +62,10 @@ export class DiffHost {
     let html = fs.readFileSync(path.join(webviewPath, 'index.html'), 'utf-8');
     const css = fs.readFileSync(path.join(webviewPath, 'styles.css'), 'utf-8');
     const js = fs.readFileSync(path.join(webviewPath, 'main.js'), 'utf-8');
+    const nonce = crypto.randomBytes(16).toString('base64');
     html = html.replace('/* INJECT_CSS */', css);
     html = html.replace('/* INJECT_JS */', js);
+    html = html.split('INJECT_NONCE').join(nonce);
     return html;
   }
 
@@ -114,7 +119,8 @@ export class DiffHost {
             { root: String(message.root1 ?? ''), ref: String(message.ref1 ?? '') },
             { root: String(message.root2 ?? ''), ref: String(message.ref2 ?? '') },
             String(message.filePath ?? ''),
-            String(message.status ?? '')
+            String(message.status ?? ''),
+            String(message.oldPath ?? '')
           );
           break;
         case 'openFile':
@@ -215,6 +221,11 @@ export class DiffHost {
 
   private sameRoot(a: string, b: string): boolean {
     return pathsEqual(a, b);
+  }
+
+  /** Webview messages are untrusted input: refs must not look like git flags. */
+  private validRefs(...refs: string[]): boolean {
+    return refs.every((r) => isSafeRef(r));
   }
 
   private pickEndpoint(
@@ -357,7 +368,7 @@ export class DiffHost {
   private async sendDiff(t1: Side, t2: Side, post: WebviewPost): Promise<void> {
     const a = { root: normalizeRoot(t1.root), ref: t1.ref };
     const b = { root: normalizeRoot(t2.root), ref: t2.ref };
-    if (!a.root || !b.root || !a.ref || !b.ref) {
+    if (!a.root || !b.root || !this.validRefs(a.ref, b.ref)) {
       return;
     }
     try {
@@ -385,7 +396,7 @@ export class DiffHost {
   private async sendCommits(t1: Side, t2: Side, post: WebviewPost): Promise<void> {
     const a = { root: normalizeRoot(t1.root), ref: t1.ref };
     const b = { root: normalizeRoot(t2.root), ref: t2.ref };
-    if (!a.root || !b.root || !a.ref || !b.ref) {
+    if (!a.root || !b.root || !this.validRefs(a.ref, b.ref)) {
       return;
     }
     if (!this.sameRoot(a.root, b.root)) {
@@ -413,11 +424,15 @@ export class DiffHost {
     t1: Side,
     t2: Side,
     filePath: string,
-    status: string
+    status: string,
+    oldPath = ''
   ): Promise<void> {
     const a = { root: normalizeRoot(t1.root), ref: t1.ref };
     const b = { root: normalizeRoot(t2.root), ref: t2.ref };
-    if (!filePath || !a.root || !b.root || !a.ref || !b.ref) {
+    if (!filePath || !a.root || !b.root || !this.validRefs(a.ref, b.ref)) {
+      return;
+    }
+    if (!isSafeRelPath(filePath) || (oldPath && !isSafeRelPath(oldPath))) {
       return;
     }
     try {
@@ -433,7 +448,9 @@ export class DiffHost {
         await vscode.window.showTextDocument(doc, { preview: true });
         return;
       }
-      const leftUri = this.gitShowUri(a.ref, filePath, a.root);
+      // Renamed/copied: the old name lives on Target 1's side.
+      const leftPath = (status === 'renamed' || status === 'copied') && oldPath ? oldPath : filePath;
+      const leftUri = this.gitShowUri(a.ref, leftPath, a.root);
       const rightUri = this.gitShowUri(b.ref, filePath, b.root);
       const title = `${path.basename(filePath)} (${this.endpointLabel(a.root, a.ref)} ↔ ${this.endpointLabel(b.root, b.ref)})`;
       await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
@@ -444,7 +461,7 @@ export class DiffHost {
 
   private async openWorktreeFile(root: string, filePath: string): Promise<void> {
     const r = normalizeRoot(root);
-    if (!r || !filePath) {
+    if (!r || !isSafeRelPath(filePath)) {
       return;
     }
     const fileUri = vscode.Uri.file(path.join(r, filePath));
@@ -465,7 +482,7 @@ export class DiffHost {
   ): Promise<void> {
     const a = { root: normalizeRoot(t1.root), ref: t1.ref };
     const b = { root: normalizeRoot(t2.root), ref: t2.ref };
-    if (!filePath || !a.root || !b.root || !a.ref) {
+    if (!a.root || !b.root || !this.validRefs(a.ref) || !isSafeRelPath(filePath)) {
       return;
     }
 
@@ -479,7 +496,10 @@ export class DiffHost {
     }
 
     try {
-      const destAbs = path.join(b.root, filePath);
+      const destAbs = path.resolve(b.root, filePath);
+      if (!pathIsUnder(destAbs, b.root)) {
+        throw new Error(`Path escapes Target 2 root: ${filePath}`);
+      }
       const same = this.sameRoot(a.root, b.root);
 
       if (status === 'added') {
@@ -516,6 +536,11 @@ export class GitShowContentProvider implements vscode.TextDocumentContentProvide
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
     try {
       const query = JSON.parse(uri.query) as { branch: string; path: string; root: string };
+      // URIs can come from anywhere (recent editors, other extensions):
+      // treat ref and path as untrusted.
+      if (!isSafeRef(query.branch) || !isSafeRelPath(query.path)) {
+        return '';
+      }
       const git = new GitService(query.root);
       return await git.getFileContent(query.branch, query.path);
     } catch {

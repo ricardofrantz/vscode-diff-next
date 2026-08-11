@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.0
+
+Security:
+
+- Upgrade `simple-git` past known RCE advisories (GHSA-jcxm-m3jx-f287 and friends).
+- Validate every ref and path arriving from the webview or virtual-document URIs:
+  refs must not look like git flags; paths must be repo-relative with no `..` escapes.
+- Contain discard/restore writes inside the target repository root.
+- Nonce-based webview CSP (no more `unsafe-inline` scripts); error messages render
+  as text, closing an HTML-injection path via crafted branch names.
+
+Fixes:
+
+- Rename parsing: `--numstat` renames (`old => new`) no longer create phantom
+  "modified" entries; renamed files now carry correct +/− counts.
+- NUL-separated (`-z`) git output everywhere: unicode and unusual filenames work.
+- Renamed/copied files diff old path ↔ new path instead of an empty left side.
+- Cross-repo discard copies blob bytes (`cat-file`) — binary files survive unchanged.
+
+Maintenance:
+
+- Default branch renamed `master` → `main`; old `0.0.x` tags removed, releases
+  now tagged `vX.Y.Z`.
+- Commit history capped at 1000 entries for huge ranges.
+- ESLint 9 flat config (`npm run lint` works again) and a lint step in CI;
+  dev-dependency audit clean.
+- Drop redundant `activationEvents` (auto-generated since VS Code 1.75).
+
 ## 0.3.0
 
 - Two endpoint fields only: `{folder} · {ref}` with HEAD first per folder.

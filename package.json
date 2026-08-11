@@ -1,48 +1,70 @@
 {
-  "name": "diff-visualizer",
-  "displayName": "Diff Visualizer",
-  "description": "Visualize and explore file changes, commit history between Git branches with an intuitive interface",
-  "version": "0.0.9",
-  "publisher": "lixiaoliang",
+  "name": "diff-next",
+  "displayName": "vscode-diff Next",
+  "description": "Compare Git branches or two workspace repos in VS Code: dual targets, file tree, commit history (same-repo), built-in diffs.",
+  "version": "0.3.0",
+  "publisher": "RicardoFrantz",
   "license": "MIT",
-  "icon": "./images/logo.png",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1e2227",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/lxliang912/diff-visualizer"
+    "url": "https://github.com/ricardofrantz/vscode-diff-next.git"
   },
+  "bugs": {
+    "url": "https://github.com/ricardofrantz/vscode-diff-next/issues"
+  },
+  "homepage": "https://github.com/ricardofrantz/vscode-diff-next",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
+    "SCM Providers",
     "Other"
   ],
+  "keywords": [
+    "diff",
+    "git",
+    "branch",
+    "compare",
+    "cross-repo",
+    "multi-root",
+    "source-control",
+    "commit-history",
+    "vscode-diff",
+    "diff-next"
+  ],
   "activationEvents": [
-    "onView:branchDiff.panel",
-    "onCommand:branchDiff.compare"
+    "onView:diff-next.panel",
+    "onCommand:diff-next.compare"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "branchDiff.compare",
-        "title": "Diff Visualizer: Compare Branches"
+        "command": "diff-next.compare",
+        "title": "vscode-diff Next: Compare Branches",
+        "icon": "$(git-compare)"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "branch-diff",
-          "title": "Diff Visualizer",
+          "id": "diff-next",
+          "title": "vscode-diff Next",
           "icon": "$(git-compare)"
         }
       ]
     },
     "views": {
-      "branch-diff": [
+      "diff-next": [
         {
           "type": "webview",
-          "id": "branchDiff.panel",
-          "name": ""
+          "id": "diff-next.panel",
+          "name": "vscode-diff Next"
         }
       ]
     }
@@ -51,10 +73,12 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile",
     "lint": "eslint src --ext ts",
     "package": "vsce package",
-    "publish": "vsce publish"
+    "smoke:paths": "node scripts/smoke-paths.js",
+    "update": "node -e \"const {spawnSync}=require('child_process');const w=process.platform==='win32';const r=spawnSync(w?'powershell': 'bash',[...(w?['-NoProfile','-ExecutionPolicy','Bypass','-File','./update-extension.ps1']:['./update-extension.sh'])],{stdio:'inherit'});process.exit(r.status??1)\"",
+    "update:norestart": "node -e \"const {spawnSync}=require('child_process');const w=process.platform==='win32';const r=spawnSync(w?'powershell':'bash',[...(w?['-NoProfile','-ExecutionPolicy','Bypass','-File','./update-extension.ps1','-NoRestart']:['./update-extension.sh','--no-restart'])],{stdio:'inherit'});process.exit(r.status??1)\"",
+    "update:dev": "node -e \"const {spawnSync}=require('child_process');const w=process.platform==='win32';const r=spawnSync(w?'powershell':'bash',[...(w?['-NoProfile','-ExecutionPolicy','Bypass','-File','./update-extension.ps1','-DevHost']:['./update-extension.sh','--dev-host'])],{stdio:'inherit'});process.exit(r.status??1)\""
   },
   "devDependencies": {
     "@types/node": "^20.x",

@@ -4,24 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
-  <title>Branch Diff</title>
+  <title>vscode-diff Next</title>
   <style>/* INJECT_CSS */</style>
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <div class="branch-selector">
-        <select id="baseBranch" class="branch-select">
-          <option value="">Select base branch</option>
-        </select>
-        <span class="arrow">←</span>
-        <select id="targetBranch" class="branch-select">
-          <option value="">Select target branch</option>
-        </select>
-      </div>
-      <div class="header-actions">
-        <button id="refreshBtn" class="icon-btn" title="Refresh">
-          <span class="icon">↻</span>
+      <div class="targets-bar">
+        <div class="side side-1" title="Target 1">
+          <select id="endpoint1" class="endpoint-select" aria-label="Target 1"></select>
+        </div>
+        <button type="button" id="swapBtn" class="icon-btn swap-btn" title="Swap both sides">
+          <span class="icon" aria-hidden="true">⇄</span>
+        </button>
+        <div class="side side-2" title="Target 2">
+          <select id="endpoint2" class="endpoint-select" aria-label="Target 2"></select>
+        </div>
+        <button type="button" id="refreshBtn" class="icon-btn" title="Refresh">
+          <span class="icon" aria-hidden="true">↻</span>
         </button>
       </div>
     </header>
@@ -29,31 +29,41 @@
     <div class="content">
       <section class="changes-section">
         <div class="section-header collapsible" id="changesHeader">
-          <span id="changesCount">0 Changes</span>
-          <div class="stats">
-            <span class="additions" id="totalAdditions">+0</span>
-            <span class="deletions" id="totalDeletions">-0</span>
+          <div class="section-header-main">
+            <span id="changesCount">0 changes</span>
+            <span id="compareContext" class="compare-context"></span>
+          </div>
+          <div class="header-tools" id="headerTools">
+            <div class="font-size-tools" title="List font size" onclick="event.stopPropagation()">
+              <button type="button" id="fontMinus" class="font-btn" aria-label="Smaller list font">−</button>
+              <span id="fontSizeLabel" class="font-size-label">12</span>
+              <button type="button" id="fontPlus" class="font-btn" aria-label="Larger list font">+</button>
+            </div>
+            <div class="stats" id="statsRow">
+              <span class="additions" id="totalAdditions" hidden></span>
+              <span class="deletions" id="totalDeletions" hidden></span>
+            </div>
           </div>
         </div>
         <div id="changesBody" class="section-body">
-        <div id="fileTree" class="file-tree">
-          <div class="empty-state">Select branches to compare</div>
+          <div id="fileTree" class="file-tree" tabindex="0" role="listbox" aria-label="Changed files">
+            <div class="empty-state">Pick two unique endpoints</div>
           </div>
         </div>
       </section>
 
       <div class="resizer" id="resizer"></div>
 
-      <section class="commits-section">
-        <div class="section-header collapsible" id="commitsHeader">
-          <span>COMMIT HISTORY</span>
+      <section class="commits-section collapsed">
+        <div class="section-header collapsible collapsed" id="commitsHeader">
+          <span id="commitsTitle">Commit history</span>
         </div>
-        <div id="commitsBody" class="section-body">
-        <div class="commit-search">
-          <input type="text" id="commitSearch" placeholder="Search commits or authors...">
-        </div>
-        <div id="commitList" class="commit-list">
-          <div class="empty-state">No commits to display</div>
+        <div id="commitsBody" class="section-body collapsed">
+          <div class="commit-search">
+            <input type="text" id="commitSearch" placeholder="Search commits…">
+          </div>
+          <div id="commitList" class="commit-list">
+            <div class="empty-state">No commits</div>
           </div>
         </div>
       </section>
@@ -63,4 +73,3 @@
   <script>/* INJECT_JS */</script>
 </body>
 </html>
-

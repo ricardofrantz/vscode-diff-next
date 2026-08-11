@@ -1,0 +1,25 @@
+vscode-diff Next
+================
+
+This product is published by Ricardo A. S. Frantz as
+**vscode-diff Next** (`RicardoFrantz.diff-next`), the git-diff sibling of
+**vscode-pdf Next** (`RicardoFrantz.pdf-preview-next`).
+
+Upstream
+--------
+
+This repository is a maintained fork of Diff Visualizer:
+
+  https://github.com/lxliang912/diff-visualizer
+
+Original author credit: lxliang912 / lkcoffee.
+The git history of that project is preserved so lineage stays visible.
+
+Substantial changes in this fork (identity, packaging, host structure,
+git status accuracy, documentation, and tooling) are under Ricardo's
+copyright as stated in LICENSE.
+
+Third-party
+-----------
+
+simple-git — MIT — https://github.com/steveukx/git-js

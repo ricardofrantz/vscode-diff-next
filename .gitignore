@@ -1,5 +1,9 @@
-out
-node_modules
+out/
+dist/
+node_modules/
 .vscode-test/
+.work/
 *.vsix
-
+*.tgz
+.DS_Store
+Thumbs.db

@@ -1,46 +1,28 @@
 import * as vscode from 'vscode';
 import { BranchDiffPanel } from './panels/BranchDiffPanel';
 import { BranchDiffViewProvider } from './panels/BranchDiffViewProvider';
-import { GitService } from './services/gitService';
+import { GIT_SHOW_SCHEME, GitShowContentProvider } from './host/DiffHost';
 
-class GitShowContentProvider implements vscode.TextDocumentContentProvider {
-  async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
-    console.log('GitShowContentProvider called with uri:', uri.toString());
-    console.log('uri.query:', uri.query);
-    try {
-      const query = JSON.parse(uri.query);
-      const { branch, path, root } = query;
-      console.log('Parsed query:', { branch, path, root });
-      const gitService = new GitService(root);
-      const content = await gitService.getFileContent(branch, path);
-      console.log('Content length:', content.length);
-      return content;
-    } catch (error) {
-      console.error('GitShowContentProvider error:', error);
-      return '';
-    }
-  }
-}
-
-export function activate(context: vscode.ExtensionContext) {
-  const gitShowProvider = new GitShowContentProvider();
+export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.workspace.registerTextDocumentContentProvider('git-show', gitShowProvider)
+    vscode.workspace.registerTextDocumentContentProvider(
+      GIT_SHOW_SCHEME,
+      new GitShowContentProvider()
+    )
   );
 
-  const provider = new BranchDiffViewProvider(context.extensionUri);
-  
+  const provider = new BranchDiffViewProvider(context.extensionUri, context);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('branchDiff.panel', provider, {
-      webviewOptions: { retainContextWhenHidden: true }
+    vscode.window.registerWebviewViewProvider(BranchDiffViewProvider.viewType, provider, {
+      webviewOptions: { retainContextWhenHidden: true },
     })
   );
 
-  const compareCommand = vscode.commands.registerCommand('branchDiff.compare', () => {
-    BranchDiffPanel.createOrShow(context.extensionUri);
-  });
-
-  context.subscriptions.push(compareCommand);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('diff-next.compare', () => {
+      BranchDiffPanel.createOrShow(context.extensionUri, context);
+    })
+  );
 }
 
-export function deactivate() {}
+export function deactivate(): void {}

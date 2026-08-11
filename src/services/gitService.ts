@@ -308,7 +308,7 @@ export class GitService {
       totalDeletions += counts.deletions;
       files.push({
         path: filePath,
-        oldPath: st.oldPath,
+        ...(st.oldPath ? { oldPath: st.oldPath } : {}),
         additions: counts.additions,
         deletions: counts.deletions,
         status: st.status,
@@ -342,7 +342,7 @@ export class GitService {
         continue;
       }
       const message = body?.trim()
-        ? `${subject.trim()}\n${body.trim()}`
+        ? `${(subject ?? '').trim()}\n${body.trim()}`
         : (subject ?? '').trim();
       commits.push({
         hash: hash.trim(),
@@ -641,7 +641,7 @@ export class GitService {
         const oldPath = tokens[i + 1];
         const newPath = tokens[i + 2];
         if (newPath) {
-          map.set(newPath, { status, oldPath });
+          map.set(newPath, oldPath ? { status, oldPath } : { status });
         }
         i += 3;
       } else {
@@ -680,8 +680,10 @@ export class GitService {
         i += 1;
         continue;
       }
-      const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0;
-      const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0;
+      const addRaw = parts[0] ?? '-';
+      const delRaw = parts[1] ?? '-';
+      const additions = addRaw === '-' ? 0 : parseInt(addRaw, 10) || 0;
+      const deletions = delRaw === '-' ? 0 : parseInt(delRaw, 10) || 0;
       let filePath = parts[2];
       if (!filePath) {
         // Rename/copy: counts keyed on the new path.

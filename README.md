@@ -48,8 +48,9 @@ security posture, docs, and day-to-day tooling follow the same bar as
 
 ## Getting started
 
-Requires **Git** on `PATH`. For the install scripts, the VS Code CLI (`code`)
-must be on `PATH` too.
+Requires **VS Code 1.95+** and **Git** on `PATH`. For the install scripts, the
+VS Code CLI (`code`) must be on `PATH` too. Prebuilt VSIX files are attached to
+[GitHub Releases](https://github.com/ricardofrantz/vscode-diff-next/releases).
 
 ### From this repo
 
@@ -148,7 +149,8 @@ update-extension.ps1/.sh   compile → package → install → restart
 ```
 
 Checks: `npm run lint`, `npm run compile`, `npm run smoke:paths`. CI runs all
-three plus a VSIX package on Linux, macOS, and Windows.
+three plus a VSIX package on Linux, macOS, and Windows. Releases are tag-driven
+— see [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Coming from `lixiaoliang.diff-visualizer`?
 

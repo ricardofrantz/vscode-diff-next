@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0
+
+Harmonized with vscode-pdf Next — same settings, same release process:
+
+- Tag-driven **Release workflow**: pushing `vX.Y.Z` verifies, packages, attaches
+  the VSIX to a GitHub Release, and publishes to Marketplace/Open VSX once the
+  PATs are configured (same guardrails as vscode-pdf-next: SHA-pinned actions,
+  tag/version validation, protected environment).
+- CI reshaped to the family standard: least-privilege permissions, concurrency
+  groups, Node 22, production-dependency audit, `workflow_dispatch`.
+- Stricter TypeScript (`ES2022`, `noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes`) matching the sibling repo.
+- Engines floor raised to VS Code 1.95; declared
+  `untrustedWorkspaces.supported: false` (the extension runs git, so it stays
+  disabled in Restricted Mode).
+- SECURITY.md rewritten in the family format with an audit-history table;
+  added docs/RELEASING.md; shared `.vscode` workspace settings.
+
 ## 0.4.0
 
 Security:

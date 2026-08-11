@@ -2,7 +2,7 @@
   "name": "diff-next",
   "displayName": "vscode-diff Next",
   "description": "Compare Git branches or two workspace repos in VS Code: dual targets, file tree, commit history (same-repo), built-in diffs.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "RicardoFrantz",
   "license": "MIT",
   "icon": "icon.png",
@@ -19,7 +19,14 @@
   },
   "homepage": "https://github.com/ricardofrantz/vscode-diff-next",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.95.0",
+    "node": ">=22"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Runs git against the opened workspace repositories."
+    }
   },
   "categories": [
     "SCM Providers",
@@ -79,7 +86,7 @@
   "devDependencies": {
     "@eslint/js": "^9.x",
     "@types/node": "^20.x",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.95.0",
     "@typescript-eslint/eslint-plugin": "^8.x",
     "@typescript-eslint/parser": "^8.x",
     "eslint": "^9.x",

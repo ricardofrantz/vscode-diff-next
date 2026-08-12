@@ -39,6 +39,7 @@ security posture, docs, and day-to-day tooling follow the same bar as
 | Dual targets: any two workspace repos + branches | ✅ |
 | SCM-style list (M / U / D / R / C) with foldable groups | ✅ |
 | M → side-by-side diff; U/D → single side; R → old ↔ new | ✅ |
+| Images and PDFs open in their viewer, changed ones side by side | ✅ |
 | Open Target 2 worktree file (↗) | ✅ |
 | Editable diff + per-change revert arrow (→) when Target 2 is checked out | ✅ |
 | Discard: apply Target 1 → Target 2 worktree (binary-safe) | ✅ |

@@ -8,8 +8,10 @@ src/
   host/DiffHost.ts          shared webview message handling
   panels/                   sidebar view + editor panel shells
   services/gitService.ts    git via simple-git; normalizeRoot / pathsEqual
+  services/fileStatus.ts    the only definition of a changed file's status
   webview/                  HTML / CSS / JS (injected at runtime)
 scripts/smoke-paths.js      path equality smoke (CI)
+scripts/smoke-status.js     file-status vocabulary smoke (CI)
 tools/make_icon.py          marketplace icon
 update-extension.ps1        Windows: compile → VSIX → install
 update-extension.sh         Linux / macOS: same
@@ -54,9 +56,9 @@ npm run update:norestart  # you reload the window
 
 ```bash
 npm run compile
-npm run smoke:paths
-npx @vscode/vsce package
-code --install-extension ./diff-next-<version>.vsix --force
+npm run lint
+npm run smoke          # paths + file-status vocabulary
+npm run package        # @vscode/vsce, from devDependencies
 ```
 
 Manual smoke: multi-root workspace, pick two sides, open M / U / D, fold a

@@ -14,8 +14,8 @@ Pushing a version tag releases automatically via GitHub Actions:
    git push origin main vX.Y.Z
    ```
 
-3. The **Release** workflow verifies (lint, compile, path smoke, production
-   audit), packages the VSIX, creates/updates the GitHub Release with the VSIX
+3. The **Release** workflow verifies (lint, compile, path and file-status
+   smokes, production audit), packages the VSIX, creates/updates the GitHub Release with the VSIX
    attached, then publishes to:
    - VS Code Marketplace (`VSCE_PAT` secret — skipped with a note until the
      extension is registered and the secret is set)

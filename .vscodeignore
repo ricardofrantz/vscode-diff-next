@@ -13,11 +13,14 @@ tsconfig.json
 package-lock.json
 tools/**
 docs/**
+scripts/**
+eslint.config.mjs
 SECURITY.md
 NOTICE
 CHANGELOG.md
 update-extension.ps1
 update-extension.cmd
+update-extension.sh
 images/icon-128.png
 *.vsix
 *.tgz

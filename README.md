@@ -40,6 +40,7 @@ security posture, docs, and day-to-day tooling follow the same bar as
 | SCM-style list (M / U / D / R / C) with foldable groups | ✅ |
 | M → side-by-side diff; U/D → single side; R → old ↔ new | ✅ |
 | Open Target 2 worktree file (↗) | ✅ |
+| Editable diff + per-change revert arrow (→) when Target 2 is checked out | ✅ |
 | Discard: apply Target 1 → Target 2 worktree (binary-safe) | ✅ |
 | Commit history + search (same-repo only, capped at 1000) | ✅ |
 | Persist last pair + list font size | ✅ |
@@ -109,6 +110,28 @@ Marketplace id once published: `RicardoFrantz.diff-next`.
    `↗` opens the Target 2 worktree file.
 
 Command Palette: **vscode-diff Next: Compare Branches** (editor-area panel).
+
+### Per-change revert arrows (like VS Code's own diff)
+
+When **Target 2 is the checked-out branch** of its repository and the file
+exists on disk, the diff opens against the **working-tree file** instead of a
+read-only snapshot (the title ends in `· Working Tree`). That makes the right
+side editable, so VS Code's built-in diff editor shows its native per-change
+gutter arrow (`→`) — click it to revert just that change to Target 1's version,
+then save (`Ctrl+S`) to persist. `F7` / `Shift+F7` (and the title-bar arrows)
+jump between changes in any diff.
+
+Notes:
+
+- The arrow is VS Code's own `diffEditor.renderMarginRevertIcon` (default on).
+- The right side shows the file **as it is on disk**, including uncommitted
+  local edits; the file tree still lists changes between the two committed
+  refs, so a reverted-and-saved file stays listed until you commit.
+- When neither target is checked out, diffs stay read-only snapshots as before.
+  Set `diff-next.diffAgainstWorktree: false` to always get read-only diffs.
+- The `+` (stage hunk) gutter button is exclusive to VS Code's built-in git
+  SCM views and can't appear in extension-opened diffs — save your revert,
+  then stage it from the Source Control view.
 
 ## Security model
 

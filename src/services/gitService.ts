@@ -198,13 +198,18 @@ export class GitService {
     return this.workspaceRoot;
   }
 
+  /** Short name of the checked-out branch, or '' when detached. */
+  async getCurrentBranch(): Promise<string> {
+    const current = (await this.git.revparse(['--abbrev-ref', 'HEAD']).catch(() => '')).trim();
+    return current === 'HEAD' ? '' : current;
+  }
+
   /**
    * Local heads only (D4: remotes hidden).
    * Still returns remote: [] so callers stay compatible.
    */
   async getLocalBranches(): Promise<BranchList> {
-    const current = (await this.git.revparse(['--abbrev-ref', 'HEAD']).catch(() => '')).trim();
-    const currentBranch = current === 'HEAD' ? '' : current;
+    const currentBranch = await this.getCurrentBranch();
 
     const raw = await this.git.raw([
       'for-each-ref',

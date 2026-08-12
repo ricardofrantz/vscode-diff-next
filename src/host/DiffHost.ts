@@ -417,8 +417,36 @@ export class DiffHost {
   }
 
   /**
+   * Real-file URI for Target 2's worktree copy, or undefined when ineligible.
+   * Eligible only when Target 2's ref is the checked-out branch (or a detached
+   * 'HEAD' endpoint) and the file exists on disk. An editable right side makes
+   * VS Code render its native per-change revert arrow in the diff gutter.
+   */
+  private async worktreeUri(b: Side, filePath: string): Promise<vscode.Uri | undefined> {
+    const enabled = vscode.workspace
+      .getConfiguration('diff-next')
+      .get<boolean>('diffAgainstWorktree', true);
+    if (!enabled) {
+      return undefined;
+    }
+    if (b.ref !== 'HEAD') {
+      const current = await new GitService(b.root).getCurrentBranch().catch(() => '');
+      if (!current || b.ref !== current) {
+        return undefined;
+      }
+    }
+    const abs = path.resolve(b.root, filePath);
+    if (!pathIsUnder(abs, b.root) || !fs.existsSync(abs)) {
+      return undefined;
+    }
+    return vscode.Uri.file(abs);
+  }
+
+  /**
    * Open file content. Modified → side-by-side diff.
    * Added (U) → Target 2 only. Deleted (D) → Target 1 only.
+   * The right side is the on-disk file when Target 2 is the checked-out branch,
+   * so the diff is editable and shows per-change revert arrows.
    */
   private async openDiff(
     t1: Side,
@@ -437,7 +465,8 @@ export class DiffHost {
     }
     try {
       if (status === 'added') {
-        const uri = this.gitShowUri(b.ref, filePath, b.root);
+        const uri =
+          (await this.worktreeUri(b, filePath)) ?? this.gitShowUri(b.ref, filePath, b.root);
         const doc = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(doc, { preview: true });
         return;
@@ -451,8 +480,12 @@ export class DiffHost {
       // Renamed/copied: the old name lives on Target 1's side.
       const leftPath = (status === 'renamed' || status === 'copied') && oldPath ? oldPath : filePath;
       const leftUri = this.gitShowUri(a.ref, leftPath, a.root);
-      const rightUri = this.gitShowUri(b.ref, filePath, b.root);
-      const title = `${path.basename(filePath)} (${this.endpointLabel(a.root, a.ref)} ↔ ${this.endpointLabel(b.root, b.ref)})`;
+      const wt = await this.worktreeUri(b, filePath);
+      const rightUri = wt ?? this.gitShowUri(b.ref, filePath, b.root);
+      const rightLabel = wt
+        ? `${this.endpointLabel(b.root, b.ref)} · Working Tree`
+        : this.endpointLabel(b.root, b.ref);
+      const title = `${path.basename(filePath)} (${this.endpointLabel(a.root, a.ref)} ↔ ${rightLabel})`;
       await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
     } catch (error) {
       void vscode.window.showErrorMessage(`Could not open file: ${error}`);

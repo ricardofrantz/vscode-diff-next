@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0
+
+Per-change revert arrows, like VS Code's own diff editor:
+
+- When Target 2 is the checked-out branch of its repo (and the file exists on
+  disk), diffs open against the working-tree file instead of a read-only
+  snapshot. The right side becomes editable and VS Code renders its native
+  per-change gutter arrow (`→`) to revert a single change to Target 1's
+  version; the title marks the side as `· Working Tree`.
+- Checkout state is read live (`git rev-parse --abbrev-ref HEAD`) at diff-open
+  time, so switching branches in a terminal is picked up immediately; detached
+  `HEAD` endpoints count as checked out.
+- New setting `diff-next.diffAgainstWorktree` (default `true`) to restore the
+  old always-read-only behavior.
+- Falls back to read-only snapshots whenever the file is missing on disk or
+  Target 2 is not checked out. Deleted files keep the single-side view.
+
 ## 0.5.0
 
 Harmonized with vscode-pdf Next — same settings, same release process:

@@ -2,7 +2,7 @@
   "name": "diff-next",
   "displayName": "vscode-diff Next",
   "description": "Compare Git branches or two workspace repos in VS Code: dual targets, file tree, commit history (same-repo), built-in diffs.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "RicardoFrantz",
   "license": "MIT",
   "icon": "icon.png",
@@ -70,6 +70,16 @@
           "name": "vscode-diff Next"
         }
       ]
+    },
+    "configuration": {
+      "title": "vscode-diff Next",
+      "properties": {
+        "diff-next.diffAgainstWorktree": {
+          "type": "boolean",
+          "default": true,
+          "description": "When Target 2 is the checked-out branch of its repository, diff against the file on disk so changes are editable and the per-change revert arrow (→) appears in the gutter. Turn off to always diff committed content read-only."
+        }
+      }
     }
   },
   "scripts": {

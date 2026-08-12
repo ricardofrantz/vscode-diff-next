@@ -658,39 +658,28 @@ function splitPath(filePath) {
   return { dir: norm.slice(0, i), base: norm.slice(i + 1) };
 }
 
-const STATUS_LETTER = {
-  added: 'U',
-  modified: 'M',
-  deleted: 'D',
-  renamed: 'R',
-  copied: 'C',
-  typechange: 'T',
-  unknown: '?',
-};
+// FILE_STATUSES is injected by DiffHost from services/fileStatus.ts: letters,
+// group order, labels and the behaviour that follows from a status all come
+// from there, so the panel cannot disagree with the extension about what a
+// status is. Keeping a second copy here is what let them drift apart.
+const STATUS_INFO = new Map(FILE_STATUSES.map((info) => [info.value, info]));
+const UNKNOWN_STATUS = STATUS_INFO.get('unknown');
 
-const STATUS_GROUP_ORDER = [
-  'modified',
-  'added',
-  'deleted',
-  'renamed',
-  'copied',
-  'typechange',
-  'unknown',
-];
+function statusInfo(status) {
+  return STATUS_INFO.get(status) || UNKNOWN_STATUS;
+}
 
-const STATUS_GROUP_LABEL = {
-  modified: 'Modified',
-  added: 'New (U)',
-  deleted: 'Deleted',
-  renamed: 'Renamed',
-  copied: 'Copied',
-  typechange: 'Type change',
-  unknown: 'Other',
-};
+function statusLetter(status) {
+  return statusInfo(status).letter;
+}
+
+function statusGroupLabel(status) {
+  return statusInfo(status).label;
+}
 
 function statusRank(status) {
-  const i = STATUS_GROUP_ORDER.indexOf(status);
-  return i < 0 ? 99 : i;
+  const i = FILE_STATUSES.findIndex((info) => info.value === status);
+  return i < 0 ? FILE_STATUSES.length : i;
 }
 
 function sortFilesForDisplay(files) {
@@ -797,7 +786,7 @@ function renderFileTree(files, totalStats, isRestore = false, meta) {
       group.appendChild(chevron);
       const label = document.createElement('span');
       label.className = 'scm-group-label';
-      const baseLabel = STATUS_GROUP_LABEL[file.status] || file.status;
+      const baseLabel = statusGroupLabel(file.status);
       const c = counts[file.status] || 0;
       label.textContent = `${baseLabel} · ${c}`;
       group.appendChild(label);
@@ -819,7 +808,7 @@ function renderFileTree(files, totalStats, isRestore = false, meta) {
     }
     row.dataset.type = 'file';
     row.setAttribute('role', 'option');
-    const letter = STATUS_LETTER[file.status] || '?';
+    const letter = statusLetter(file.status);
     row.title =
       file.status === 'added'
         ? `U  ${file.path} (open Target 2 only)`
@@ -855,7 +844,7 @@ function renderFileTree(files, totalStats, isRestore = false, meta) {
     const discardBtn = document.createElement('button');
     discardBtn.type = 'button';
     discardBtn.className = 'scm-action scm-action-discard';
-    const removes = file.status === 'added';
+    const removes = statusInfo(file.status).addedInTarget2;
     if (state.workingTree) {
       discardBtn.title = removes
         ? 'Delete this file from the working tree'
@@ -870,7 +859,7 @@ function renderFileTree(files, totalStats, isRestore = false, meta) {
     discardBtn.textContent = removes ? '␡' : '↺';
     actions.appendChild(discardBtn);
 
-    if (file.status !== 'deleted') {
+    if (statusInfo(file.status).presentInTarget2) {
       const openBtn = document.createElement('button');
       openBtn.type = 'button';
       openBtn.className = 'scm-action scm-action-open';

@@ -49,6 +49,9 @@ jobs:
       - name: Path helpers smoke
         run: node scripts/smoke-paths.js
 
+      - name: File status vocabulary smoke
+        run: node scripts/smoke-status.js
+
       - name: Audit production dependencies
         # Platform-independent; run once per workflow.
         if: runner.os == 'Linux'

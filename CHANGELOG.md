@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.2
+
+The file-status vocabulary has one definition.
+
+- **One table instead of four.** The status names and git's letter codes
+  lived in `gitService`, while the panel kept its own letters, its own group
+  order and its own group labels, and the stylesheet its own classes.
+  Nothing tied them together, so a status added on one side never appeared
+  on the other. `services/fileStatus.ts` now holds all of it, and DiffHost
+  injects it into the panel, which no longer keeps a copy.
+- **Behaviour follows the status, once.** "Added means the discard button
+  deletes from disk", "deleted means there is nothing on disk to open" and
+  "renamed takes its left side from the old path" were spelled out at every
+  call site in both the extension and the panel. They are flags on the table
+  now.
+- **A test that can fail.** `npm run smoke:status` runs the table rather than
+  matching the source that declares it: git’s codes map, letters stay
+  unique, the order covers every status, unrecognised input still renders,
+  the rendered page parses with the table in scope, and every status has a
+  CSS rule. It also fails if the panel grows a second copy of the
+  vocabulary. Wired into CI.
+
 ## 0.7.1
 
 Images and PDFs open.

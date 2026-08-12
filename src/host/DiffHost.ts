@@ -14,6 +14,7 @@ import {
   PATH_CASE_INSENSITIVE,
   makeEndpointId,
 } from '../services/gitService';
+import { statusInfo, statusTableScript } from '../services/fileStatus';
 
 /** Custom scheme for committed blobs served as virtual read-only files. */
 export const GIT_SHOW_SCHEME = 'diff-next-show';
@@ -147,6 +148,9 @@ export class DiffHost {
     const css = fs.readFileSync(path.join(webviewPath, 'styles.css'), 'utf-8');
     const js = fs.readFileSync(path.join(webviewPath, 'main.js'), 'utf-8');
     const nonce = crypto.randomBytes(16).toString('base64');
+    // The panel reads the status vocabulary from here rather than keeping its
+    // own copy; see services/fileStatus.ts.
+    html = html.replace('/* INJECT_STATUS_TABLE */', statusTableScript());
     html = html.replace('/* INJECT_CSS */', css);
     html = html.replace('/* INJECT_JS */', js);
     html = html.split('INJECT_NONCE').join(nonce);
@@ -580,19 +584,20 @@ export class DiffHost {
       return;
     }
     try {
-      if (status === 'added') {
+      const info = statusInfo(status);
+      if (info.addedInTarget2) {
         const uri =
           (await this.worktreeUri(b, filePath)) ?? this.gitShowUri(b.ref, filePath, b.root);
         await openInBestEditor(uri);
         return;
       }
-      if (status === 'deleted') {
+      if (!info.presentInTarget2) {
         const uri = this.gitShowUri(a.ref, filePath, a.root);
         await openInBestEditor(uri);
         return;
       }
       // Renamed/copied: the old name lives on Target 1's side.
-      const leftPath = (status === 'renamed' || status === 'copied') && oldPath ? oldPath : filePath;
+      const leftPath = info.carriesOldPath && oldPath ? oldPath : filePath;
       const leftUri = this.gitShowUri(a.ref, leftPath, a.root);
       const wt = await this.worktreeUri(b, filePath);
       const rightUri = wt ?? this.gitShowUri(b.ref, filePath, b.root);
@@ -644,7 +649,7 @@ export class DiffHost {
       return;
     }
 
-    const removing = status === 'added';
+    const removing = statusInfo(status).addedInTarget2;
     const question = removing
       ? `Delete ${filePath} from the working tree?`
       : `Restore ${filePath} from ${this.endpointLabel(a.root, a.ref)} into the working tree?`;
@@ -666,7 +671,7 @@ export class DiffHost {
       const same = this.sameRoot(a.root, b.root);
 
       let outcome: string;
-      if (status === 'added') {
+      if (removing) {
         if (fs.existsSync(destAbs)) {
           fs.unlinkSync(destAbs);
           outcome = `Deleted ${filePath} from the working tree`;

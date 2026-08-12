@@ -1,15 +1,10 @@
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as path from 'path';
 import * as fs from 'fs';
+import { STATUS_MAP, type FileStatus } from './fileStatus';
 
-export type FileStatus =
-  | 'added'
-  | 'modified'
-  | 'deleted'
-  | 'renamed'
-  | 'copied'
-  | 'typechange'
-  | 'unknown';
+export { STATUS_MAP, statusInfo, statusRank, FILE_STATUSES } from './fileStatus';
+export type { FileStatus, FileStatusInfo } from './fileStatus';
 
 export interface DiffFile {
   path: string;
@@ -160,15 +155,6 @@ export function looksBinary(bytes: Uint8Array): boolean {
   }
   return false;
 }
-
-const STATUS_MAP: Record<string, FileStatus> = {
-  A: 'added',
-  M: 'modified',
-  D: 'deleted',
-  R: 'renamed',
-  C: 'copied',
-  T: 'typechange',
-};
 
 /** Canonical root path so Windows C:/ and C:\\ match in UI selects. */
 export function normalizeRoot(p: string): string {

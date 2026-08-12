@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.0
+
+The file list now means "what I am about to commit".
+
+- **Compare against the working tree.** When Target 2 is the branch you have
+  checked out, the list is `git diff <target 1>` against the files on disk
+  rather than against the branch tip. Uncommitted work shows up, and anything
+  you change on disk changes the list immediately.
+- **The ↺ action is visible and honest.** It always edited files on disk, but
+  the list compared two commits, so deleting a file left the row exactly where
+  it was and the extension still reported success — even when it had done
+  nothing at all. It now reports what actually happened (deleted, restored, or
+  already absent), and the row disappears once the working tree matches.
+- **It refuses when it cannot apply.** With another branch checked out, the file
+  at that path belongs to that branch; the button is disabled and says so
+  instead of silently deleting the wrong file.
+- **The confirmation names the operation** — "Delete <file> from the working
+  tree?" rather than "Apply Target 1 to Target 2 worktree" for a delete — and
+  the icon differs for delete versus restore.
+- **Autorefresh.** The panel watches `.git/HEAD`, `refs/`, the index and the
+  working tree, and re-queries git within about a second of a commit, checkout,
+  branch change, staging or file edit made anywhere, including a terminal.
+- Failed validation reports an error instead of leaving a permanent
+  "Loading changes…" spinner.
+
 ## 0.6.0
 
 Per-change revert arrows, like VS Code's own diff editor:

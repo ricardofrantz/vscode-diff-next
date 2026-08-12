@@ -295,6 +295,11 @@ export class GitService {
     return { local, remote, current: currentBranch };
   }
 
+  /**
+   * Files that differ between two refs, or — when `targetBranch` is empty —
+   * between a ref and the working tree, so the list reflects what you would
+   * commit rather than what the branch tip already contains.
+   */
   async getDiffFiles(baseBranch: string, targetBranch: string): Promise<DiffResult> {
     const [statusMap, numstat] = await Promise.all([
       this.readNameStatus(baseBranch, targetBranch),
@@ -451,12 +456,13 @@ export class GitService {
     root1: string,
     ref1: string,
     root2: string,
-    ref2: string
+    ref2: string,
+    againstWorkingTree = false
   ): Promise<DiffResult> {
     const r1 = normalizeRoot(root1);
     const r2 = normalizeRoot(root2);
     if (pathsEqual(r1, r2)) {
-      return new GitService(r1).getDiffFiles(ref1, ref2);
+      return new GitService(r1).getDiffFiles(ref1, againstWorkingTree ? '' : ref2);
     }
 
     const g1 = new GitService(r1);
@@ -629,7 +635,14 @@ export class GitService {
     base: string,
     target: string
   ): Promise<Map<string, { status: FileStatus; oldPath?: string }>> {
-    const raw = await this.git.raw(['diff', '--name-status', '-z', '-M', '-C', base, target]);
+    // An empty target means "compare against the working tree": `git diff base`
+    // reports what is on disk right now, which is what the panel shows when the
+    // second endpoint is the checked-out branch.
+    const args = ['diff', '--name-status', '-z', '-M', '-C', base];
+    if (target) {
+      args.push(target);
+    }
+    const raw = await this.git.raw(args);
     const map = new Map<string, { status: FileStatus; oldPath?: string }>();
 
     const tokens = raw.split('\0');
@@ -669,7 +682,11 @@ export class GitService {
     base: string,
     target: string
   ): Promise<Map<string, { additions: number; deletions: number }>> {
-    const raw = await this.git.raw(['diff', '--numstat', '-z', '-M', '-C', base, target]);
+    const args = ['diff', '--numstat', '-z', '-M', '-C', base];
+    if (target) {
+      args.push(target);
+    }
+    const raw = await this.git.raw(args);
     const map = new Map<string, { additions: number; deletions: number }>();
 
     const tokens = raw.split('\0');

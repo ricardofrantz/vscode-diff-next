@@ -855,9 +855,19 @@ function renderFileTree(files, totalStats, isRestore = false, meta) {
     const discardBtn = document.createElement('button');
     discardBtn.type = 'button';
     discardBtn.className = 'scm-action scm-action-discard';
-    discardBtn.title = 'Apply Target 1 → Target 2 worktree';
-    discardBtn.setAttribute('aria-label', 'Discard');
-    discardBtn.textContent = '↺';
+    const removes = file.status === 'added';
+    if (state.workingTree) {
+      discardBtn.title = removes
+        ? 'Delete this file from the working tree'
+        : 'Restore this file from Target 1 into the working tree';
+      discardBtn.setAttribute('aria-label', removes ? 'Delete from disk' : 'Restore from Target 1');
+    } else {
+      discardBtn.disabled = true;
+      discardBtn.title =
+        'Read-only: Target 2 is not the checked-out branch, so there is nothing on disk to change';
+      discardBtn.setAttribute('aria-label', 'Unavailable: Target 2 is not checked out');
+    }
+    discardBtn.textContent = removes ? '␡' : '↺';
     actions.appendChild(discardBtn);
 
     if (file.status !== 'deleted') {
@@ -967,6 +977,9 @@ window.addEventListener('message', (event) => {
     case 'branches':
       break;
     case 'diff':
+      // Whether the right-hand side is the working tree decides if ↺ can do
+      // anything: it writes to disk, and disk only belongs to a checked-out ref.
+      state.workingTree = message.data.workingTree === true;
       renderFileTree(
         message.data.files,
         {

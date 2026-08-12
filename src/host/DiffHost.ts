@@ -44,11 +44,84 @@ export class DiffHost {
   private reposCachedAt = 0;
   private static readonly REPOS_CACHE_MS = 60_000;
   private fullScanInFlight: Promise<RepoInfo[]> | null = null;
+  private watchers: vscode.Disposable[] = [];
+  private watchedRoots = '';
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  private lastTargets: SavedTargets | undefined;
+  private static readonly REFRESH_DEBOUNCE_MS = 400;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly context?: vscode.ExtensionContext
   ) {}
+
+  /**
+   * Re-query git when the repository or the working tree changes, so the panel
+   * stops showing a comparison from whenever you last pressed refresh.
+   *
+   * Watches `.git/HEAD` (checkout), `refs/**` (commit, branch add or delete) and
+   * `index` (staging), plus the working tree itself — which now matters, because
+   * the right-hand side of the comparison can be the files on disk.
+   */
+  private watchRepositories(roots: string[], post: WebviewPost): void {
+    const unique = [...new Set(roots.filter(Boolean).map(normalizeRoot))].sort();
+    const key = unique.join('|');
+    if (key === this.watchedRoots) {
+      return;
+    }
+    this.disposeWatchers();
+    this.watchedRoots = key;
+
+    for (const root of unique) {
+      for (const pattern of ['.git/HEAD', '.git/refs/**', '.git/index', '**/*']) {
+        const watcher = vscode.workspace.createFileSystemWatcher(
+          new vscode.RelativePattern(vscode.Uri.file(root), pattern)
+        );
+        const bump = (): void => this.scheduleRefresh(post);
+        watcher.onDidChange(bump);
+        watcher.onDidCreate(bump);
+        watcher.onDidDelete(bump);
+        this.watchers.push(watcher);
+      }
+    }
+  }
+
+  private scheduleRefresh(post: WebviewPost): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      const targets = this.lastTargets;
+      if (!targets) {
+        return;
+      }
+      // A repository change can also add or remove branches, so the cached repo
+      // scan has to go with it or autorefresh would redraw stale endpoints.
+      this.reposCachedAt = 0;
+      void this.sendDiff(
+        { root: targets.root1, ref: targets.ref1 },
+        { root: targets.root2, ref: targets.ref2 },
+        post
+      );
+    }, DiffHost.REFRESH_DEBOUNCE_MS);
+  }
+
+  private disposeWatchers(): void {
+    for (const watcher of this.watchers) {
+      watcher.dispose();
+    }
+    this.watchers = [];
+    this.watchedRoots = '';
+  }
+
+  dispose(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+    this.disposeWatchers();
+  }
 
   configureWebview(webview: vscode.Webview): void {
     webview.options = {
@@ -369,25 +442,33 @@ export class DiffHost {
     const a = { root: normalizeRoot(t1.root), ref: t1.ref };
     const b = { root: normalizeRoot(t2.root), ref: t2.ref };
     if (!a.root || !b.root || !this.validRefs(a.ref, b.ref)) {
+      post({
+        command: 'error',
+        message: 'Could not load diff: unusable repository path or branch name.',
+      });
       return;
     }
     try {
-      const data = await GitService.compareTrees(a.root, a.ref, b.root, b.ref);
+      // When Target 2 is the branch you have checked out, compare against the
+      // working tree: the list then means "what I am about to commit", so
+      // editing a file on disk changes it and the ↺ action has visible effect.
+      const live = await this.isLiveWorktree(a, b);
+      const data = await GitService.compareTrees(a.root, a.ref, b.root, b.ref, live);
       post({
         command: 'diff',
         data: {
           ...data,
           crossRepo: !this.sameRoot(a.root, b.root),
+          workingTree: live,
           label1: this.endpointLabel(a.root, a.ref),
-          label2: this.endpointLabel(b.root, b.ref),
+          label2: live
+            ? `${this.endpointLabel(b.root, b.ref)} (working tree)`
+            : this.endpointLabel(b.root, b.ref),
         },
       });
-      void this.writeSavedTargets({
-        root1: a.root,
-        ref1: a.ref,
-        root2: b.root,
-        ref2: b.ref,
-      });
+      this.lastTargets = { root1: a.root, ref1: a.ref, root2: b.root, ref2: b.ref };
+      this.watchRepositories([a.root, b.root], post);
+      void this.writeSavedTargets(this.lastTargets);
     } catch (error) {
       post({ command: 'error', message: `Could not load diff: ${error}` });
     }
@@ -422,6 +503,30 @@ export class DiffHost {
    * 'HEAD' endpoint) and the file exists on disk. An editable right side makes
    * VS Code render its native per-change revert arrow in the diff gutter.
    */
+  /**
+   * Is Target 2 the branch actually checked out in its own repository?
+   *
+   * Only then does the working tree belong to the endpoint the user picked, and
+   * only then can editing files on disk change what the comparison shows.
+   */
+  private async isLiveWorktree(a: Side, b: Side): Promise<boolean> {
+    if (!this.sameRoot(a.root, b.root)) {
+      return false;
+    }
+    if (
+      !vscode.workspace
+        .getConfiguration('diff-next')
+        .get<boolean>('diffAgainstWorktree', true)
+    ) {
+      return false;
+    }
+    if (b.ref === 'HEAD') {
+      return true;
+    }
+    const current = await new GitService(b.root).getCurrentBranch().catch(() => '');
+    return Boolean(current) && current === b.ref;
+  }
+
   private async worktreeUri(b: Side, filePath: string): Promise<vscode.Uri | undefined> {
     const enabled = vscode.workspace
       .getConfiguration('diff-next')
@@ -515,16 +620,33 @@ export class DiffHost {
   ): Promise<void> {
     const a = { root: normalizeRoot(t1.root), ref: t1.ref };
     const b = { root: normalizeRoot(t2.root), ref: t2.ref };
-    if (!a.root || !b.root || !this.validRefs(a.ref) || !isSafeRelPath(filePath)) {
+    if (!a.root || !b.root || !this.validRefs(a.ref, b.ref) || !isSafeRelPath(filePath)) {
+      post({ command: 'error', message: 'Cannot apply: unusable path or branch name.' });
       return;
     }
 
+    // Writing to disk only makes sense when that disk belongs to Target 2. With
+    // another branch checked out, the file at this path is someone else's.
+    if (!(await this.isLiveWorktree(a, b))) {
+      const message =
+        `Cannot change ${filePath}: Target 2 (${this.endpointLabel(b.root, b.ref)}) ` +
+        `is not checked out, so this comparison is read-only.`;
+      void vscode.window.showWarningMessage(message);
+      post({ command: 'error', message });
+      return;
+    }
+
+    const removing = status === 'added';
+    const question = removing
+      ? `Delete ${filePath} from the working tree?`
+      : `Restore ${filePath} from ${this.endpointLabel(a.root, a.ref)} into the working tree?`;
+    const confirm = removing ? 'Delete' : 'Restore';
     const pick = await vscode.window.showWarningMessage(
-      `Apply Target 1 to Target 2 worktree?\n\n${this.endpointLabel(a.root, a.ref)} → ${path.basename(b.root)} (disk)\n${filePath}`,
+      `${question}\n\nThis changes files on disk. Commit the result yourself afterwards.`,
       { modal: true },
-      'Discard'
+      confirm
     );
-    if (pick !== 'Discard') {
+    if (pick !== confirm) {
       return;
     }
 
@@ -535,20 +657,25 @@ export class DiffHost {
       }
       const same = this.sameRoot(a.root, b.root);
 
+      let outcome: string;
       if (status === 'added') {
         if (fs.existsSync(destAbs)) {
           fs.unlinkSync(destAbs);
+          outcome = `Deleted ${filePath} from the working tree`;
+        } else {
+          // Nothing to delete. Saying "done" here is what made this look broken.
+          outcome = `${filePath} was already absent from the working tree`;
         }
       } else if (same) {
         await new GitService(b.root).restoreWorktreeFrom(a.ref, filePath);
-      } else if (status === 'deleted') {
-        await new GitService(a.root).writeBlobToAbsolutePath(a.ref, filePath, destAbs);
+        outcome = `Restored ${filePath} from ${this.endpointLabel(a.root, a.ref)}`;
       } else {
         await new GitService(a.root).writeBlobToAbsolutePath(a.ref, filePath, destAbs);
+        outcome = `Wrote ${filePath} from ${this.endpointLabel(a.root, a.ref)}`;
       }
 
       post({ command: 'discardDone', filePath });
-      void vscode.window.showInformationMessage(`Updated worktree: ${filePath}`);
+      void vscode.window.showInformationMessage(`${outcome}. Commit when you are ready.`);
       await this.sendDiff(a, b, post);
     } catch (error) {
       void vscode.window.showErrorMessage(`Could not discard: ${error}`);

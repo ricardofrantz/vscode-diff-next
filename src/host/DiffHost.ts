@@ -15,8 +15,19 @@ import {
   makeEndpointId,
 } from '../services/gitService';
 
-/** Custom scheme for `git show branch:path` virtual documents. */
+/** Custom scheme for committed blobs served as virtual read-only files. */
 export const GIT_SHOW_SCHEME = 'diff-next-show';
+
+/**
+ * Open a file the way VS Code would from the explorer, instead of forcing a
+ * text editor onto it. `openTextDocument` refuses binary content ("File seems
+ * to be binary and cannot be opened as text"), which is what stopped images and
+ * PDFs from opening at all; `vscode.open` runs the normal editor resolution, so
+ * a PNG lands in the image preview and a PDF in vscode-pdf Next.
+ */
+async function openInBestEditor(uri: vscode.Uri, preview = true): Promise<void> {
+  await vscode.commands.executeCommand('vscode.open', uri, { preview });
+}
 
 export type WebviewPost = (message: unknown) => void;
 
@@ -572,14 +583,12 @@ export class DiffHost {
       if (status === 'added') {
         const uri =
           (await this.worktreeUri(b, filePath)) ?? this.gitShowUri(b.ref, filePath, b.root);
-        const doc = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(doc, { preview: true });
+        await openInBestEditor(uri);
         return;
       }
       if (status === 'deleted') {
         const uri = this.gitShowUri(a.ref, filePath, a.root);
-        const doc = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(doc, { preview: true });
+        await openInBestEditor(uri);
         return;
       }
       // Renamed/copied: the old name lives on Target 1's side.
@@ -604,8 +613,7 @@ export class DiffHost {
     }
     const fileUri = vscode.Uri.file(path.join(r, filePath));
     try {
-      const document = await vscode.workspace.openTextDocument(fileUri);
-      await vscode.window.showTextDocument(document);
+      await openInBestEditor(fileUri, false);
     } catch (error) {
       void vscode.window.showErrorMessage(`Could not open file: ${error}`);
     }
@@ -684,27 +692,155 @@ export class DiffHost {
   }
 
   private gitShowUri(branch: string, filePath: string, root: string): vscode.Uri {
-    return vscode.Uri.from({
-      scheme: GIT_SHOW_SCHEME,
-      path: `/${encodeURIComponent(branch)}/${filePath}`,
-      query: JSON.stringify({ branch, path: filePath, root: normalizeRoot(root) }),
-    });
+    return makeBlobUri(root, branch, filePath);
   }
 }
 
-export class GitShowContentProvider implements vscode.TextDocumentContentProvider {
-  async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
-    try {
-      const query = JSON.parse(uri.query) as { branch: string; path: string; root: string };
-      // URIs can come from anywhere (recent editors, other extensions):
-      // treat ref and path as untrusted.
-      if (!isSafeRef(query.branch) || !isSafeRelPath(query.path)) {
-        return '';
-      }
-      const git = new GitService(query.root);
-      return await git.getFileContent(query.branch, query.path);
-    } catch {
-      return '';
+/**
+ * Which repository and ref a blob URI points at, encoded into the *path*.
+ *
+ * The endpoint used to live in the query string, which cost nothing while
+ * everything was text — but viewers do not all keep it. vscode-pdf Next, for
+ * one, reads `resource.with({ query: '', fragment: '' })`, so a ref parked in
+ * the query would be dropped and both sides of a PDF diff would ask for the
+ * same bytes. Encoded in the path it survives every viewer, and the real file
+ * name still ends the URI so `*.png` / `*.pdf` editor globs keep matching.
+ */
+function encodeEndpoint(root: string, ref: string): string {
+  const json = JSON.stringify({ root: normalizeRoot(root), ref });
+  return Buffer.from(json, 'utf8').toString('base64url');
+}
+
+function decodeEndpoint(token: string): { root: string; ref: string } | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(token, 'base64url').toString('utf8')) as {
+      root?: unknown;
+      ref?: unknown;
+    };
+    const root = typeof parsed.root === 'string' ? parsed.root : '';
+    const ref = typeof parsed.ref === 'string' ? parsed.ref : '';
+    return root && ref ? { root, ref } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `diff-next-show:/<endpoint>/<repo relative path>` for one blob. */
+export function makeBlobUri(root: string, ref: string, filePath: string): vscode.Uri {
+  return vscode.Uri.from({
+    scheme: GIT_SHOW_SCHEME,
+    path: `/${encodeEndpoint(root, ref)}/${filePath.replace(/\\/g, '/')}`,
+  });
+}
+
+type BlobTarget = { root: string; ref: string; filePath: string };
+
+function parseBlobUri(uri: vscode.Uri): BlobTarget | null {
+  const raw = uri.path.replace(/^\/+/, '');
+  const slash = raw.indexOf('/');
+  if (slash <= 0) {
+    return null;
+  }
+  const endpoint = decodeEndpoint(raw.slice(0, slash));
+  const filePath = raw.slice(slash + 1);
+  if (!endpoint || !filePath) {
+    return null;
+  }
+  // URIs can come from anywhere (restored editors, other extensions):
+  // treat ref and path as untrusted.
+  if (!isSafeRef(endpoint.ref) || !isSafeRelPath(filePath)) {
+    return null;
+  }
+  return { root: endpoint.root, ref: endpoint.ref, filePath };
+}
+
+/**
+ * Serves committed blobs as bytes.
+ *
+ * A TextDocumentContentProvider can only return a string, which is why images
+ * and PDFs used to arrive mangled or refused to open at all: the bytes were
+ * UTF-8 decoded on the way out. A FileSystemProvider hands VS Code the real
+ * bytes, so its own binary detection kicks in and the file reaches whichever
+ * editor claims it — the built-in image preview, or vscode-pdf Next for PDFs,
+ * both of which read through `vscode.workspace.fs`.
+ */
+export class GitBlobFileSystemProvider implements vscode.FileSystemProvider {
+  private readonly changeEmitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
+  readonly onDidChangeFile = this.changeEmitter.event;
+
+  /**
+   * VS Code asks for stat and content back to back, and each call is a git
+   * process. One short-lived entry per URI answers both from a single read
+   * while still picking up new content the next time the file is opened.
+   */
+  private readonly cache = new Map<string, { bytes: Uint8Array; at: number }>();
+  private static readonly CACHE_MS = 5_000;
+
+  watch(): vscode.Disposable {
+    // Committed blobs never change under us; a moved branch reopens the editor.
+    return new vscode.Disposable(() => undefined);
+  }
+
+  private async read(uri: vscode.Uri): Promise<Uint8Array> {
+    const key = uri.toString();
+    const hit = this.cache.get(key);
+    const now = Date.now();
+    if (hit && now - hit.at < GitBlobFileSystemProvider.CACHE_MS) {
+      return hit.bytes;
     }
+    const target = parseBlobUri(uri);
+    if (!target) {
+      throw vscode.FileSystemError.FileNotFound(uri);
+    }
+    let bytes: Uint8Array;
+    try {
+      const buffer = await new GitService(target.root).getBlobBytes(
+        target.ref,
+        target.filePath
+      );
+      bytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength).slice();
+    } catch {
+      throw vscode.FileSystemError.FileNotFound(uri);
+    }
+    if (this.cache.size > 64) {
+      this.cache.clear();
+    }
+    this.cache.set(key, { bytes, at: now });
+    return bytes;
+  }
+
+  async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
+    const bytes = await this.read(uri);
+    return {
+      type: vscode.FileType.File,
+      ctime: 0,
+      mtime: 0,
+      size: bytes.byteLength,
+      permissions: vscode.FilePermission.Readonly,
+    };
+  }
+
+  async readFile(uri: vscode.Uri): Promise<Uint8Array> {
+    return this.read(uri);
+  }
+
+  readDirectory(): [string, vscode.FileType][] {
+    return [];
+  }
+
+  createDirectory(): void {
+    throw vscode.FileSystemError.NoPermissions('Committed content is read-only.');
+  }
+
+  writeFile(): void {
+    throw vscode.FileSystemError.NoPermissions('Committed content is read-only.');
+  }
+
+  delete(): void {
+    throw vscode.FileSystemError.NoPermissions('Committed content is read-only.');
+  }
+
+  rename(): void {
+    throw vscode.FileSystemError.NoPermissions('Committed content is read-only.');
   }
 }

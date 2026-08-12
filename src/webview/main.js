@@ -881,7 +881,18 @@ function renderFileTree(files, totalStats, isRestore = false, meta) {
     }
     row.appendChild(actions);
 
-    if (file.additions > 0 || file.deletions > 0) {
+    if (file.binary) {
+      // No line counts exist for an image or a PDF, and a silent blank column
+      // reads like "nothing changed" — say why the numbers are missing.
+      const stats = document.createElement('span');
+      stats.className = 'scm-stats';
+      const b = document.createElement('span');
+      b.className = 'binary';
+      b.textContent = 'bin';
+      b.title = 'Binary file: opens in a viewer instead of a text diff';
+      stats.appendChild(b);
+      row.appendChild(stats);
+    } else if (file.additions > 0 || file.deletions > 0) {
       const stats = document.createElement('span');
       stats.className = 'scm-stats';
       if (file.additions > 0) {

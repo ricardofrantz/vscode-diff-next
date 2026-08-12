@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.1
+
+Images and PDFs open.
+
+- **Binary files are served as bytes, not text.** Committed content went through
+  a text provider that UTF-8 decoded it on the way out, which rewrote every byte
+  a PNG header or a PDF trailer depends on. A read-only filesystem provider now
+  hands VS Code the bytes git actually stored.
+- **Clicking a figure or a PDF opens a viewer.** Added and deleted files were
+  opened with `openTextDocument`, which refuses binary content outright ("File
+  seems to be binary and cannot be opened as text"). They now go through normal
+  editor resolution: PNG, JPG and friends land in VS Code's image preview, PDFs
+  in vscode-pdf Next, and a modified image or PDF opens as a side-by-side
+  comparison of the two versions.
+- **The repository and ref moved out of the URI query and into its path.**
+  Viewers are free to strip the query — vscode-pdf Next does — which would have
+  pointed both sides of a PDF comparison at the same bytes.
+- **Binary files are marked `bin` in the list** instead of showing a blank
+  column where `+0 −0` would read as "nothing changed".
 ## 0.7.0
 
 The file list now means "what I am about to commit".

@@ -17,6 +17,8 @@ export interface DiffFile {
   additions: number;
   deletions: number;
   status: FileStatus;
+  /** Git reported no line counts (numstat '-'), or the name is a media file. */
+  binary?: boolean;
 }
 
 export interface CommitInfo {
@@ -117,6 +119,46 @@ export function isSafeRelPath(p: string): boolean {
     return false;
   }
   return !norm.split('/').some((seg) => seg === '..');
+}
+
+/**
+ * Extensions VS Code — or an installed viewer such as vscode-pdf Next — renders
+ * in its own editor instead of as text. Comparing two repositories yields no
+ * line counts, so for those the name is the only hint that a viewer is needed.
+ */
+const MEDIA_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpe',
+  '.jpeg',
+  '.gif',
+  '.bmp',
+  '.ico',
+  '.webp',
+  '.avif',
+  '.pdf',
+  '.mp3',
+  '.wav',
+  '.ogg',
+  '.oga',
+  '.mp4',
+  '.webm',
+]);
+
+/** True for paths a text diff could only mangle. */
+export function isMediaPath(filePath: string): boolean {
+  return MEDIA_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+/** True when a NUL byte turns up early, the same sniff VS Code itself uses. */
+export function looksBinary(bytes: Uint8Array): boolean {
+  const limit = Math.min(bytes.length, 8000);
+  for (let i = 0; i < limit; i += 1) {
+    if (bytes[i] === 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const STATUS_MAP: Record<string, FileStatus> = {
@@ -313,15 +355,18 @@ export class GitService {
 
     for (const filePath of [...paths].sort()) {
       const st = statusMap.get(filePath) ?? { status: 'modified' as FileStatus };
-      const counts = numstat.get(filePath) ?? { additions: 0, deletions: 0 };
+      const counts =
+        numstat.get(filePath) ?? { additions: 0, deletions: 0, binary: false };
       totalAdditions += counts.additions;
       totalDeletions += counts.deletions;
+      const binary = counts.binary || isMediaPath(filePath);
       files.push({
         path: filePath,
         ...(st.oldPath ? { oldPath: st.oldPath } : {}),
         additions: counts.additions,
         deletions: counts.deletions,
         status: st.status,
+        ...(binary ? { binary: true } : {}),
       });
     }
 
@@ -366,12 +411,15 @@ export class GitService {
     return commits;
   }
 
-  async getFileContent(branch: string, filePath: string): Promise<string> {
-    try {
-      return await this.git.show([`${branch}:${filePath}`]);
-    } catch {
-      return '';
-    }
+  /**
+   * Raw blob bytes at a ref.
+   *
+   * `git show` hands back a UTF-8 string, which silently replaces every byte
+   * that is not valid UTF-8 — enough to destroy a PNG header or a PDF trailer.
+   * Viewers need the bytes git actually stored, so read the blob as a Buffer.
+   */
+  async getBlobBytes(ref: string, filePath: string): Promise<Buffer> {
+    return this.git.binaryCatFile(['blob', `${ref}:${filePath}`]);
   }
 
   /** True if path exists as a blob at ref. */
@@ -478,12 +526,15 @@ export class GitService {
     for (const filePath of [...all].sort()) {
       const id1 = map1.get(filePath);
       const id2 = map2.get(filePath);
+      // Cross-repo comparison never runs `git diff`, so there is no numstat '-'
+      // to mark binaries: the file name is all we have to go on.
+      const binary = isMediaPath(filePath) ? { binary: true } : {};
       if (id1 && !id2) {
-        files.push({ path: filePath, additions: 0, deletions: 0, status: 'deleted' });
+        files.push({ path: filePath, additions: 0, deletions: 0, status: 'deleted', ...binary });
       } else if (!id1 && id2) {
-        files.push({ path: filePath, additions: 0, deletions: 0, status: 'added' });
+        files.push({ path: filePath, additions: 0, deletions: 0, status: 'added', ...binary });
       } else if (id1 && id2 && id1 !== id2) {
-        files.push({ path: filePath, additions: 0, deletions: 0, status: 'modified' });
+        files.push({ path: filePath, additions: 0, deletions: 0, status: 'modified', ...binary });
       }
     }
 
@@ -681,13 +732,16 @@ export class GitService {
   private async readNumstat(
     base: string,
     target: string
-  ): Promise<Map<string, { additions: number; deletions: number }>> {
+  ): Promise<Map<string, { additions: number; deletions: number; binary: boolean }>> {
     const args = ['diff', '--numstat', '-z', '-M', '-C', base];
     if (target) {
       args.push(target);
     }
     const raw = await this.git.raw(args);
-    const map = new Map<string, { additions: number; deletions: number }>();
+    const map = new Map<
+      string,
+      { additions: number; deletions: number; binary: boolean }
+    >();
 
     const tokens = raw.split('\0');
     let i = 0;
@@ -704,6 +758,9 @@ export class GitService {
       }
       const addRaw = parts[0] ?? '-';
       const delRaw = parts[1] ?? '-';
+      // '-' for both counts is git saying "binary": there are no lines to
+      // count, so the file needs a viewer rather than a text diff.
+      const binary = addRaw === '-' && delRaw === '-';
       const additions = addRaw === '-' ? 0 : parseInt(addRaw, 10) || 0;
       const deletions = delRaw === '-' ? 0 : parseInt(delRaw, 10) || 0;
       let filePath = parts[2];
@@ -715,7 +772,7 @@ export class GitService {
         i += 1;
       }
       if (filePath) {
-        map.set(filePath, { additions, deletions });
+        map.set(filePath, { additions, deletions, binary });
       }
     }
 

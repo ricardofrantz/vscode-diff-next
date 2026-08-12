@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
 import { BranchDiffPanel } from './panels/BranchDiffPanel';
 import { BranchDiffViewProvider } from './panels/BranchDiffViewProvider';
-import { GIT_SHOW_SCHEME, GitShowContentProvider } from './host/DiffHost';
+import { GIT_SHOW_SCHEME, GitBlobFileSystemProvider } from './host/DiffHost';
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.workspace.registerTextDocumentContentProvider(
+    vscode.workspace.registerFileSystemProvider(
       GIT_SHOW_SCHEME,
-      new GitShowContentProvider()
+      new GitBlobFileSystemProvider(),
+      { isCaseSensitive: true, isReadonly: true }
     )
   );
 

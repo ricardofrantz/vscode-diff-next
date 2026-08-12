@@ -266,6 +266,12 @@ body {
   color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
 }
 
+/* Binary files have no line counts to show; mark them instead of leaving a gap. */
+.binary {
+  color: var(--vscode-descriptionForeground, #8a8a8a);
+  font-style: italic;
+}
+
 .file-tree {
   padding: 0;
   flex: 1;

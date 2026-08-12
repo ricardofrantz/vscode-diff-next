@@ -2,7 +2,7 @@
   "name": "diff-next",
   "displayName": "vscode-diff Next",
   "description": "Compare Git branches or two workspace repos in VS Code: dual targets, file tree, commit history (same-repo), built-in diffs.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "publisher": "RicardoFrantz",
   "license": "MIT",
   "icon": "icon.png",

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.3
+
+Session tabs, folder-then-branch pickers, and compare-window controls.
+
+- Several compares stay open as sidebar tabs.
+- Each side is picked by folder, then that folder's branches.
+- The compare toolbar sets wrap, whitespace, layout, collapse, pin, moved code, and next/prev file.
+- Opening a compare no longer fails if a workspace setting write is refused.
+
 ## 0.7.2
 
 The file-status vocabulary has one definition.

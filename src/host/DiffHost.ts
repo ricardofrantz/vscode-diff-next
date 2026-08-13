@@ -325,15 +325,29 @@ export class DiffHost {
   }
 
   private async applyDiffEditorSettings(prefs: DiffViewPrefs): Promise<void> {
-    const cfg = vscode.workspace.getConfiguration('diffEditor');
-    const target = vscode.ConfigurationTarget.Workspace;
-    await Promise.all([
-      cfg.update('wordWrap', prefs.wordWrap ? 'on' : 'off', target),
-      cfg.update('ignoreTrimWhitespace', prefs.ignoreTrimWhitespace, target),
-      cfg.update('renderSideBySide', prefs.sideBySide, target),
-      cfg.update('hideUnchangedRegions.enabled', prefs.collapseUnchanged, target),
-      cfg.update('experimental.showMoves', prefs.showMoves, target),
-    ]);
+    const writes: Array<[string, string, unknown]> = [
+      ['diffEditor', 'wordWrap', prefs.wordWrap ? 'on' : 'off'],
+      ['diffEditor', 'ignoreTrimWhitespace', prefs.ignoreTrimWhitespace],
+      ['diffEditor', 'renderSideBySide', prefs.sideBySide],
+      ['diffEditor.hideUnchangedRegions', 'enabled', prefs.collapseUnchanged],
+      ['diffEditor.experimental', 'showMoves', prefs.showMoves],
+    ];
+    const targets = [vscode.ConfigurationTarget.Workspace, vscode.ConfigurationTarget.Global];
+    for (const [section, key, value] of writes) {
+      let ok = false;
+      for (const target of targets) {
+        try {
+          await vscode.workspace.getConfiguration(section).update(key, value, target);
+          ok = true;
+          break;
+        } catch {
+          // Try the next target; never fail the compare open.
+        }
+      }
+      if (!ok) {
+        continue;
+      }
+    }
   }
 
   private looksLikeGitRoot(root: string): boolean {
@@ -641,10 +655,18 @@ export class DiffHost {
         : this.endpointLabel(b.root, b.ref);
       const title = `${path.basename(filePath)} (${this.endpointLabel(a.root, a.ref)} ↔ ${rightLabel})`;
       const prefs = this.readDiffView();
-      await this.applyDiffEditorSettings(prefs);
-      await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, {
-        preview: !prefs.pinTab,
-      });
+      try {
+        await this.applyDiffEditorSettings(prefs);
+      } catch {
+        // Settings are optional; the diff must still open.
+      }
+      try {
+        await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, {
+          preview: !prefs.pinTab,
+        });
+      } catch {
+        await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
+      }
       await this.jumpToFirstChange();
     } catch (error) {
       void vscode.window.showErrorMessage(`Could not open file: ${error}`);

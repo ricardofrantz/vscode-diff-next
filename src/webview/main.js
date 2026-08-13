@@ -358,6 +358,7 @@ function init() {
   });
 
   fileTree.addEventListener('click', (e) => {
+    closePicker();
     const groupHdr = e.target.closest('.scm-group');
     if (groupHdr && groupHdr.dataset.status) {
       e.stopPropagation();
@@ -648,6 +649,7 @@ function choosePickerItem(index) {
   updateSideTitles();
   flushSession();
   if (state.root1 && state.root2 && state.ref1 && state.ref2 && state.id1 !== state.id2) {
+    closePicker();
     loadDiff();
   }
 }
@@ -986,10 +988,10 @@ function bindDiffViewBtn(btn, key) {
   if (!btn) {
     return;
   }
-  btn.addEventListener('click', () => {
+  btn.addEventListener('change', () => {
     state.diffView = normalizeDiffView({
       ...state.diffView,
-      [key]: !state.diffView[key],
+      [key]: btn.checked,
     });
     renderDiffViewButtons();
     saveState();
@@ -1000,17 +1002,17 @@ function bindDiffViewBtn(btn, key) {
 function renderDiffViewButtons() {
   const p = normalizeDiffView(state.diffView);
   state.diffView = p;
-  setPressed(wrapBtn, p.wordWrap);
-  setPressed(wsBtn, p.ignoreTrimWhitespace);
-  setPressed(layoutBtn, p.sideBySide);
-  setPressed(collapseBtn, p.collapseUnchanged);
-  setPressed(pinBtn, p.pinTab);
-  setPressed(movesBtn, p.showMoves);
+  setChecked(wrapBtn, p.wordWrap);
+  setChecked(wsBtn, p.ignoreTrimWhitespace);
+  setChecked(layoutBtn, p.sideBySide);
+  setChecked(collapseBtn, p.collapseUnchanged);
+  setChecked(pinBtn, p.pinTab);
+  setChecked(movesBtn, p.showMoves);
 }
 
-function setPressed(btn, on) {
+function setChecked(btn, on) {
   if (btn) {
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.checked = Boolean(on);
   }
 }
 

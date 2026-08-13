@@ -17,19 +17,20 @@ export const DEFAULT_DIFF_VIEW: DiffViewPrefs = {
   ignoreTrimWhitespace: false,
   sideBySide: true,
   collapseUnchanged: false,
-  pinTab: true,
-  showMoves: true,
+  pinTab: false,
+  showMoves: false,
 };
 
 export function normalizeDiffView(raw: unknown): DiffViewPrefs {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const has = (k: string): boolean => Object.prototype.hasOwnProperty.call(o, k);
   return {
-    wordWrap: o.wordWrap !== false,
+    wordWrap: has('wordWrap') ? o.wordWrap === true : DEFAULT_DIFF_VIEW.wordWrap,
     ignoreTrimWhitespace: o.ignoreTrimWhitespace === true,
-    sideBySide: o.sideBySide !== false,
+    sideBySide: has('sideBySide') ? o.sideBySide === true : DEFAULT_DIFF_VIEW.sideBySide,
     collapseUnchanged: o.collapseUnchanged === true,
-    pinTab: o.pinTab !== false,
-    showMoves: o.showMoves !== false,
+    pinTab: o.pinTab === true,
+    showMoves: o.showMoves === true,
   };
 }
 
@@ -58,12 +59,12 @@ export function diffViewScript(): string {
 function normalizeDiffView(raw) {
   const o = raw && typeof raw === 'object' ? raw : {};
   return {
-    wordWrap: o.wordWrap !== false,
+    wordWrap: Object.prototype.hasOwnProperty.call(o, 'wordWrap') ? o.wordWrap === true : true,
     ignoreTrimWhitespace: o.ignoreTrimWhitespace === true,
-    sideBySide: o.sideBySide !== false,
+    sideBySide: Object.prototype.hasOwnProperty.call(o, 'sideBySide') ? o.sideBySide === true : true,
     collapseUnchanged: o.collapseUnchanged === true,
-    pinTab: o.pinTab !== false,
-    showMoves: o.showMoves !== false
+    pinTab: o.pinTab === true,
+    showMoves: o.showMoves === true
   };
 }
 function neighborPath(paths, current, delta) {

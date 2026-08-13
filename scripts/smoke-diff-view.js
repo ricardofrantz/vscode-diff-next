@@ -20,7 +20,8 @@ try {
 }
 
 assert.strictEqual(DEFAULT_DIFF_VIEW.wordWrap, true);
-assert.strictEqual(DEFAULT_DIFF_VIEW.pinTab, true);
+assert.strictEqual(DEFAULT_DIFF_VIEW.pinTab, false);
+assert.strictEqual(DEFAULT_DIFF_VIEW.showMoves, false);
 assert.strictEqual(DEFAULT_DIFF_VIEW.sideBySide, true);
 
 const empty = normalizeDiffView(undefined);

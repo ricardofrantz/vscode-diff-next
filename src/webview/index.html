@@ -38,6 +38,17 @@
         <div class="picker-crumb" id="pickerCrumb"></div>
         <div id="pickerList" class="picker-list" role="listbox" tabindex="0"></div>
       </div>
+      <div class="compare-view-bar" id="diffViewTools">
+        <span class="compare-view-label">Compare view</span>
+        <label class="compare-toggle"><input type="checkbox" id="wrapBtn"> Wrap</label>
+        <label class="compare-toggle"><input type="checkbox" id="wsBtn"> Ignore spaces</label>
+        <label class="compare-toggle"><input type="checkbox" id="layoutBtn"> Two columns</label>
+        <label class="compare-toggle"><input type="checkbox" id="collapseBtn"> Fold same</label>
+        <label class="compare-toggle"><input type="checkbox" id="pinBtn"> Pin tab</label>
+        <label class="compare-toggle"><input type="checkbox" id="movesBtn"> Moved code</label>
+        <button type="button" id="prevFileBtn" class="compare-nav" title="Previous file">Prev file</button>
+        <button type="button" id="nextFileBtn" class="compare-nav" title="Next file">Next file</button>
+      </div>
     </header>
 
     <div class="content">
@@ -48,16 +59,6 @@
             <span id="compareContext" class="compare-context"></span>
           </div>
           <div class="header-tools" id="headerTools">
-            <div class="diff-view-tools" id="diffViewTools" title="Compare window">
-              <button type="button" id="wrapBtn" class="diff-view-btn" aria-pressed="true" title="Word wrap">↩</button>
-              <button type="button" id="wsBtn" class="diff-view-btn" aria-pressed="false" title="Ignore whitespace">·</button>
-              <button type="button" id="layoutBtn" class="diff-view-btn" aria-pressed="true" title="Side by side">∥</button>
-              <button type="button" id="collapseBtn" class="diff-view-btn" aria-pressed="false" title="Collapse unchanged">⊟</button>
-              <button type="button" id="pinBtn" class="diff-view-btn" aria-pressed="true" title="Pin tab">◉</button>
-              <button type="button" id="movesBtn" class="diff-view-btn" aria-pressed="true" title="Show moved code">⇄</button>
-              <button type="button" id="prevFileBtn" class="diff-view-btn" title="Previous file">‹</button>
-              <button type="button" id="nextFileBtn" class="diff-view-btn" title="Next file">›</button>
-            </div>
             <div class="font-size-tools" id="fontSizeTools" title="List font size">
               <button type="button" id="fontMinus" class="font-btn" aria-label="Smaller list font">−</button>
               <span id="fontSizeLabel" class="font-size-label">12</span>

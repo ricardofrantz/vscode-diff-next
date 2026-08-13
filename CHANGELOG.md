@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.4
+
+The folder picker gets out of the way, and compare options are labeled toggles.
+
+- Picking a branch closes the list so the file tree is visible again.
+- **Compare view** sits under the two targets: Wrap, Ignore spaces, Two columns, Fold same, Pin tab, Moved code, Prev/Next file.
+- Each option is on or off by itself. Defaults: wrap and two columns on; the rest off.
+
 ## 0.7.3
 
 Session tabs, folder-then-branch pickers, and compare-window controls.

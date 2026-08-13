@@ -41,6 +41,7 @@ In a multi-root workspace with many folders, finding the right repo is a hunt th
 - KD2. **Folder then branch.** (session-settled: user-directed — chosen over a two-pane flyout and an accordion: many folders need a short folder list before any branch list.) Governs R5, R6, R7, R9, R10.
 - KD3. **Reopen lands on the current folder's branches.** (session-settled: user-approved — chosen over always restarting at folders: everyday branch switches stay one step.) Governs R8.
 - KD4. **A new tab starts unset.** Empty pickers, same as today's first-open empty state. Governs R3, R13.
+- KD5. **Compare-view toggles are independent.** (session-settled: user-directed — chosen over a single all-on toolbar: each control is on or off by itself, labeled under the targets.) Governs R15, R16, R17.
 
 ### Requirements
 
@@ -61,6 +62,14 @@ In a multi-root workspace with many folders, finding the right repo is a hunt th
 - R8. Reopening a side that already has a folder starts at step 2 for that folder, with a back action to step 1.
 - R9. The two sides cannot be the same endpoint. The peer endpoint is excluded or disabled.
 - R10. The closed control still shows `{folder} · {ref}` for the current side.
+- R14. Choosing a branch closes the picker so the file list is visible. Clicking the file list also closes it.
+
+**Compare view**
+
+- R15. A labeled Compare view row sits under the two targets, not in the file-list header.
+- R16. Wrap, ignore spaces, two columns, fold same, pin tab, and moved code are each an independent on/off toggle. Turning one on does not turn the others on.
+- R17. Defaults: wrap on, two columns on, everything else off.
+- R18. Prev file / Next file walk the current compare's changed files.
 
 **Unchanged compare behavior**
 

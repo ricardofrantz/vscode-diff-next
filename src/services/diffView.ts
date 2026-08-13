@@ -44,8 +44,11 @@ export function neighborPath(
     return '';
   }
   const i = paths.indexOf(current);
-  if (i < 0) {
+  if (!current) {
     return (delta > 0 ? paths[0] : paths[paths.length - 1]) || '';
+  }
+  if (i < 0) {
+    return '';
   }
   const n = i + delta;
   if (n < 0 || n >= paths.length) {
@@ -72,13 +75,16 @@ function neighborPath(paths, current, delta) {
     return '';
   }
   const i = paths.indexOf(current);
-  if (i < 0) {
+  if (!current) {
     return (delta > 0 ? paths[0] : paths[paths.length - 1]) || '';
+  }
+  if (i < 0) {
+    return '';
   }
   const n = i + delta;
   if (n < 0 || n >= paths.length) {
     return '';
   }
-  return paths[n];
+  return paths[n] || '';
 }`;
 }

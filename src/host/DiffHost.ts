@@ -667,18 +667,8 @@ export class DiffHost {
       } catch {
         await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
       }
-      await this.jumpToFirstChange();
     } catch (error) {
       void vscode.window.showErrorMessage(`Could not open file: ${error}`);
-    }
-  }
-
-  private async jumpToFirstChange(): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    try {
-      await vscode.commands.executeCommand('workbench.action.compareEditor.nextChange');
-    } catch {
-      // Command missing on older VS Code — the file still opens.
     }
   }
 

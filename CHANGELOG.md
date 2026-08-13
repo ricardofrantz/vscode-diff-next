@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.5
+
+Prev/next file walks the list you see, one file at a time.
+
+- Order matches the grouped file list, not git's raw order.
+- Opening a file no longer also jumps to the next hunk.
+- An unknown selection no longer snaps to the first or last file.
+
 ## 0.7.4
 
 The folder picker gets out of the way, and compare options are labeled toggles.

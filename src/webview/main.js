@@ -1017,10 +1017,19 @@ function setChecked(btn, on) {
 }
 
 function changedPaths() {
-  return (state.diffFiles || []).map((f) => f.path).filter(Boolean);
+  return sortFilesForDisplay(state.diffFiles || [])
+    .map((f) => f.path)
+    .filter(Boolean);
 }
 
+let neighborLock = 0;
+
 function openNeighborFile(delta) {
+  const now = Date.now();
+  if (now - neighborLock < 200) {
+    return;
+  }
+  neighborLock = now;
   const next = neighborPath(changedPaths(), state.selectedPath || '', delta);
   if (next) {
     selectPath(next, true);

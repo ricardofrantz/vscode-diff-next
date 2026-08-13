@@ -50,7 +50,9 @@ assert.strictEqual(neighborPath(paths, 'b.ts', 1), 'c.ts');
 assert.strictEqual(neighborPath(paths, 'b.ts', -1), 'a.ts');
 assert.strictEqual(neighborPath(paths, 'c.ts', 1), '');
 assert.strictEqual(neighborPath(paths, 'a.ts', -1), '');
-assert.strictEqual(neighborPath(paths, 'missing.ts', 1), 'a.ts');
+assert.strictEqual(neighborPath(paths, '', 1), 'a.ts');
+assert.strictEqual(neighborPath(paths, '', -1), 'c.ts');
+assert.strictEqual(neighborPath(paths, 'missing.ts', 1), '', 'unknown current must not snap to another file');
 assert.strictEqual(neighborPath([], 'a.ts', 1), '');
 
 const webviewDir = path.join(__dirname, '..', 'src', 'webview');

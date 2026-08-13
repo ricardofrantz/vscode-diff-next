@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.6
+
+Select text in a compare and leave a comment for an agent.
+
+- Editor context menu: **Comment selection for agent**.
+- Each note is a JSON file under `.diff-next/comments/` plus one `review.json` to hand over.
+- The JSON has the file, side, line range, the exact selected text, and your comment.
+
 ## 0.7.5
 
 Prev/next file walks the list you see, one file at a time.

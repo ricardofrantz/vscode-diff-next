@@ -801,7 +801,7 @@ export function makeBlobUri(root: string, ref: string, filePath: string): vscode
 
 type BlobTarget = { root: string; ref: string; filePath: string };
 
-function parseBlobUri(uri: vscode.Uri): BlobTarget | null {
+export function parseBlobUri(uri: vscode.Uri): BlobTarget | null {
   const raw = uri.path.replace(/^\/+/, '');
   const slash = raw.indexOf('/');
   if (slash <= 0) {

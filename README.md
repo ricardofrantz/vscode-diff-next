@@ -121,6 +121,11 @@ Marketplace id once published: `RicardoFrantz.diff-next`.
 
 Command Palette: **vscode-diff Next: Compare Branches** (editor-area panel).
 
+To leave a note for an agent: select text in the compare, right-click
+**vscode-diff Next: Comment selection for agent**, and type the note.
+Each comment is written to `.diff-next/comments/` in that repo. The
+combined file to hand an agent is `.diff-next/review.json`.
+
 ### Per-change revert arrows (like VS Code's own diff)
 
 When **Target 2 is the checked-out branch** of its repository and the file

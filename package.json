@@ -2,7 +2,7 @@
   "name": "diff-next",
   "displayName": "vscode-diff Next",
   "description": "Compare Git branches or two workspace repos in VS Code: dual targets, file tree, commit history (same-repo), built-in diffs.",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "publisher": "RicardoFrantz",
   "license": "MIT",
   "icon": "icon.png",
@@ -51,8 +51,28 @@
         "command": "diff-next.compare",
         "title": "vscode-diff Next: Compare Branches",
         "icon": "$(git-compare)"
+      },
+      {
+        "command": "diff-next.commentSelection",
+        "title": "vscode-diff Next: Comment selection for agent",
+        "icon": "$(comment)"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "diff-next.commentSelection",
+          "when": "editorHasSelection",
+          "group": "diff-next@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "diff-next.commentSelection",
+          "when": "editorHasSelection"
+        }
+      ]
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -92,7 +112,8 @@
     "smoke:status": "node scripts/smoke-status.js",
     "smoke:picker": "node scripts/smoke-picker.js",
     "smoke:diff-view": "node scripts/smoke-diff-view.js",
-    "smoke": "npm run smoke:paths && npm run smoke:status && npm run smoke:picker && npm run smoke:diff-view",
+    "smoke:review-comment": "node scripts/smoke-review-comment.js",
+    "smoke": "npm run smoke:paths && npm run smoke:status && npm run smoke:picker && npm run smoke:diff-view && npm run smoke:review-comment",
     "update": "node -e \"const {spawnSync}=require('child_process');const w=process.platform==='win32';const r=spawnSync(w?'powershell': 'bash',[...(w?['-NoProfile','-ExecutionPolicy','Bypass','-File','./update-extension.ps1']:['./update-extension.sh'])],{stdio:'inherit'});process.exit(r.status??1)\"",
     "update:norestart": "node -e \"const {spawnSync}=require('child_process');const w=process.platform==='win32';const r=spawnSync(w?'powershell':'bash',[...(w?['-NoProfile','-ExecutionPolicy','Bypass','-File','./update-extension.ps1','-NoRestart']:['./update-extension.sh','--no-restart'])],{stdio:'inherit'});process.exit(r.status??1)\"",
     "update:dev": "node -e \"const {spawnSync}=require('child_process');const w=process.platform==='win32';const r=spawnSync(w?'powershell':'bash',[...(w?['-NoProfile','-ExecutionPolicy','Bypass','-File','./update-extension.ps1','-DevHost']:['./update-extension.sh','--dev-host'])],{stdio:'inherit'});process.exit(r.status??1)\""

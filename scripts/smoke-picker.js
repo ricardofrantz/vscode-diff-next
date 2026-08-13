@@ -49,7 +49,7 @@ const endpoints = [
   ep('vscode-pdf-next', '/ws/vscode-pdf-next', 'main'),
 ];
 
-const folders = uniqueFolders(endpoints);
+const folders = uniqueFolders(endpoints, false);
 assert.strictEqual(folders.length, 3, 'two folders with two branches each plus one must not flatten to five rows');
 assert.deepStrictEqual(
   folders.map((f) => f.folder),
@@ -122,10 +122,22 @@ assert.ok(
   mainJs.includes('EndpointPicker'),
   'the panel must use the injected EndpointPicker helpers'
 );
+const caseFolded = uniqueFolders(
+  [ep('A', '/ws/Repo', 'main', 'a'), ep('B', '/ws/repo', 'dev', 'b')],
+  true
+);
+assert.strictEqual(caseFolded.length, 1, 'case-insensitive grouping merges roots that differ only by case');
+const caseKept = uniqueFolders(
+  [ep('A', '/ws/Repo', 'main', 'a'), ep('B', '/ws/repo', 'dev', 'b')],
+  false
+);
+assert.strictEqual(caseKept.length, 2, 'case-sensitive grouping keeps distinct roots');
+
 for (const [pattern, what] of [
   [/function uniqueFolders\s*\(/, 'uniqueFolders'],
   [/function sessionTabLabel\s*\(/, 'sessionTabLabel'],
   [/function migrateSessions\s*\(/, 'migrateSessions'],
+  [/function normalizeRoot\s*\(/, 'normalizeRoot'],
 ]) {
   assert.ok(
     !pattern.test(mainJs),

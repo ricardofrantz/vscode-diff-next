@@ -115,9 +115,6 @@ export class DiffHost {
       if (!targets) {
         return;
       }
-      // A repository change can also add or remove branches, so the cached repo
-      // scan has to go with it or autorefresh would redraw stale endpoints.
-      this.reposCachedAt = 0;
       void this.sendDiff(
         { root: targets.root1, ref: targets.ref1 },
         { root: targets.root2, ref: targets.ref2 },
@@ -307,7 +304,7 @@ export class DiffHost {
 
   private looksLikeGitRoot(root: string): boolean {
     const r = normalizeRoot(root);
-    if (!r || !fs.existsSync(r)) {
+    if (!r) {
       return false;
     }
     return fs.existsSync(path.join(r, '.git'));
@@ -394,9 +391,9 @@ export class DiffHost {
 
     if (!forceRefresh && (fast1 || fast2)) {
       try {
-        const seed = [fast1, fast2]
-          .filter(Boolean)
-          .map((root) => this.repoInfoForRoot(root));
+        const seed = [...new Set([fast1, fast2].filter(Boolean))].map((root) =>
+          this.repoInfoForRoot(root)
+        );
         this.repos = seed;
         const seedEps = await GitService.buildEndpoints(seed);
         this.endpoints = seedEps;
@@ -474,9 +471,19 @@ export class DiffHost {
             : this.endpointLabel(b.root, b.ref),
         },
       });
-      this.lastTargets = { root1: a.root, ref1: a.ref, root2: b.root, ref2: b.ref };
+      const next = { root1: a.root, ref1: a.ref, root2: b.root, ref2: b.ref };
+      const prev = this.lastTargets;
+      this.lastTargets = next;
       this.watchRepositories([a.root, b.root], post);
-      void this.writeSavedTargets(this.lastTargets);
+      const samePair =
+        prev &&
+        prev.root1 === next.root1 &&
+        prev.ref1 === next.ref1 &&
+        prev.root2 === next.root2 &&
+        prev.ref2 === next.ref2;
+      if (!samePair) {
+        void this.writeSavedTargets(next);
+      }
     } catch (error) {
       post({ command: 'error', message: `Could not load diff: ${error}` });
     }

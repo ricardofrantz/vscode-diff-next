@@ -49,14 +49,17 @@ export function samePickerRoot(a: string, b: string, caseInsensitive: boolean): 
   return caseInsensitive ? na.toLowerCase() === nb.toLowerCase() : na === nb;
 }
 
-export function uniqueFolders(endpoints: readonly PickerEndpoint[]): PickerFolder[] {
+export function uniqueFolders(
+  endpoints: readonly PickerEndpoint[],
+  caseInsensitive = true
+): PickerFolder[] {
   const seen = new Map<string, PickerFolder>();
   for (const ep of endpoints || []) {
     const root = normalizePickerRoot(ep.root);
     if (!root) {
       continue;
     }
-    const key = root.toLowerCase();
+    const key = caseInsensitive ? root.toLowerCase() : root;
     const hit = seen.get(key);
     if (hit) {
       hit.branchCount += 1;
@@ -135,15 +138,9 @@ export function migrateSessions(
       ref2: s.ref2 || '',
     }));
     const first = sessions[0];
-    if (!first) {
-      return {
-        sessions: [{ id: 's1', root1: '', ref1: '', root2: '', ref2: '' }],
-        activeId: 's1',
-      };
-    }
     const activeId =
       (saved.activeId && sessions.some((s) => s.id === saved.activeId) && saved.activeId) ||
-      first.id;
+      first!.id;
     return { sessions, activeId };
   }
   if (lastTargets && lastTargets.root1 && lastTargets.root2) {

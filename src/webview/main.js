@@ -79,7 +79,6 @@ if (previousState) {
 let sessionsFromWebview = Boolean(previousState && previousState.sessions && previousState.sessions.length);
 
 function persistSessions() {
-  snapshotActive();
   vscode.postMessage({
     command: 'saveSessions',
     sessions: (state.sessions || []).map((s) => ({
@@ -100,6 +99,11 @@ function saveState() {
     expandedFolders: Array.from(state.expandedFolders || []),
     collapsedGroups: Array.from(state.collapsedGroups || []),
   });
+}
+
+function flushSession() {
+  saveState();
+  persistSessions();
 }
 
 const endpoint1 = document.getElementById('endpoint1');
@@ -135,23 +139,8 @@ function targetsPayload(extra) {
   };
 }
 
-function normalizeRoot(p) {
-  if (!p) {
-    return '';
-  }
-  return String(p).replace(/\\/g, '/').replace(/\/+$/, '');
-}
-
-function rootKey(p) {
-  const n = normalizeRoot(p);
-  return state.pathCaseInsensitive ? n.toLowerCase() : n;
-}
-
 function sameRepo() {
-  if (!state.root1 || !state.root2) {
-    return false;
-  }
-  return rootKey(state.root1) === rootKey(state.root2);
+  return EndpointPicker.samePickerRoot(state.root1, state.root2, state.pathCaseInsensitive);
 }
 
 function statusForPath(filePath) {
@@ -184,7 +173,7 @@ function applyEndpointId(side, id) {
 
 function emptySession(id) {
   return {
-    id: id || `s-${Date.now()}`,
+    id: id || `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     id1: '',
     id2: '',
     root1: '',
@@ -250,17 +239,19 @@ function applySession(s) {
   }
 }
 
-function folderOf(root, fallback) {
+function folderOf(root) {
   const hit = (state.endpoints || []).find((e) =>
     EndpointPicker.samePickerRoot(e.root, root, state.pathCaseInsensitive)
   );
-  return (hit && hit.folder) || fallback || '';
+  if (hit && hit.folder) {
+    return hit.folder;
+  }
+  const n = EndpointPicker.normalizePickerRoot(root || '');
+  return n.split('/').pop() || n;
 }
 
 function currentTabLabel(s) {
-  const left = folderOf(s.root1, (s.label1 || '').split(' · ')[0]);
-  const right = folderOf(s.root2, (s.label2 || '').split(' · ')[0]);
-  return EndpointPicker.sessionTabLabel(left, right);
+  return EndpointPicker.sessionTabLabel(folderOf(s.root1), folderOf(s.root2));
 }
 
 function ensureCommitsCollapsed() {
@@ -295,7 +286,6 @@ function init() {
     if (pickerState.step === 2) {
       pickerState.step = 1;
       pickerState.folderRoot = '';
-      pickerState.query = '';
       pickerSearch.value = '';
       renderPickerList();
       pickerSearch.focus();
@@ -465,7 +455,6 @@ const pickerState = {
   step: 1,
   folderRoot: '',
   folderName: '',
-  query: '',
   items: [],
   active: 0,
 };
@@ -478,7 +467,7 @@ function closedLabel(side) {
     return label;
   }
   if (root && ref) {
-    const folder = folderOf(root, '');
+    const folder = folderOf(root);
     return folder ? `${folder} · ${ref}` : `${ref}`;
   }
   return 'Select folder…';
@@ -512,16 +501,14 @@ function openPicker(side) {
   if (currentRoot) {
     pickerState.step = 2;
     pickerState.folderRoot = currentRoot;
-    pickerState.folderName = folderOf(currentRoot, '');
+    pickerState.folderName = folderOf(currentRoot);
   } else {
     pickerState.step = 1;
     pickerState.folderRoot = '';
     pickerState.folderName = '';
   }
-  pickerState.query = '';
   pickerSearch.value = '';
   picker.hidden = false;
-  picker.classList.remove('hidden');
   endpoint1.setAttribute('aria-expanded', side === 1 ? 'true' : 'false');
   endpoint2.setAttribute('aria-expanded', side === 2 ? 'true' : 'false');
   renderPickerList();
@@ -530,7 +517,6 @@ function openPicker(side) {
 
 function closePicker() {
   picker.hidden = true;
-  picker.classList.add('hidden');
   endpoint1.setAttribute('aria-expanded', 'false');
   endpoint2.setAttribute('aria-expanded', 'false');
   pickerState.side = 0;
@@ -539,7 +525,7 @@ function closePicker() {
 function pickerItems() {
   const q = pickerSearch.value || '';
   if (pickerState.step === 1) {
-    const folders = EndpointPicker.uniqueFolders(state.endpoints || []);
+    const folders = EndpointPicker.uniqueFolders(state.endpoints || [], state.pathCaseInsensitive);
     return EndpointPicker.filterByQuery(folders, q, (f) => f.folder);
   }
   const excludeId = pickerState.side === 1 ? state.id2 : state.id1;
@@ -556,6 +542,7 @@ function renderPickerList() {
   const items = pickerItems();
   pickerState.items = items;
   pickerState.active = 0;
+  pickerSearch.placeholder = pickerState.step === 1 ? 'Filter folders…' : 'Filter branches…';
   if (pickerState.step === 2) {
     pickerCrumb.textContent = `← ${pickerState.folderName || 'Folders'}`;
   } else {
@@ -570,8 +557,12 @@ function renderPickerList() {
     return;
   }
   items.forEach((item, i) => {
+    const currentId = pickerState.side === 1 ? state.id1 : state.id2;
     const row = document.createElement('div');
     row.className = 'picker-opt' + (i === 0 ? ' active' : '');
+    if (pickerState.step === 2 && item.id === currentId) {
+      row.classList.add('selected');
+    }
     row.setAttribute('role', 'option');
     const name = document.createElement('span');
     name.className = 'picker-opt-name';
@@ -620,22 +611,16 @@ function choosePickerItem(index) {
     pickerSearch.focus();
     return;
   }
-  applyEndpointId(pickerState.side, item.id);
-  if (state.id1 && state.id2 && state.id1 === state.id2) {
-    if (pickerState.side === 2) {
-      state.id2 = '';
-      state.root2 = '';
-      state.ref2 = '';
-      state.label2 = '';
-    }
+  const peerId = pickerState.side === 1 ? state.id2 : state.id1;
+  if (peerId && item.id === peerId) {
     return;
   }
+  applyEndpointId(pickerState.side, item.id);
   closePicker();
   renderClosedButtons();
   renderTabs();
   updateSideTitles();
-  persistSessions();
-  saveState();
+  flushSession();
   if (state.root1 && state.root2 && state.ref1 && state.ref2 && state.id1 !== state.id2) {
     loadDiff();
   }
@@ -676,16 +661,18 @@ function renderTabs() {
     name.className = 'session-tab-name';
     name.textContent = currentTabLabel(s);
     tab.appendChild(name);
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'session-tab-close';
-    close.title = 'Close';
-    close.textContent = '×';
-    close.addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeSession(s.id);
-    });
-    tab.appendChild(close);
+    if (EndpointPicker.canCloseSession((state.sessions || []).length)) {
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'session-tab-close';
+      close.title = 'Close';
+      close.textContent = '×';
+      close.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeSession(s.id);
+      });
+      tab.appendChild(close);
+    }
     tab.addEventListener('click', () => switchSession(s.id));
     sessionTabs.appendChild(tab);
   });
@@ -712,8 +699,7 @@ function switchSession(id) {
   renderTabs();
   renderClosedButtons();
   updateSideTitles();
-  persistSessions();
-  saveState();
+  flushSession();
   if (state.diffFiles && state.diffFiles.length) {
     renderFileTree(state.diffFiles, state.totalStats || { additions: 0, deletions: 0 }, true);
   } else if (!state.root1 || !state.root2) {
@@ -740,8 +726,7 @@ function addSession() {
   state.commits = [];
   renderTabs();
   renderClosedButtons();
-  persistSessions();
-  saveState();
+  flushSession();
 }
 
 function closeSession(id) {
@@ -752,17 +737,17 @@ function closeSession(id) {
   if (!remaining.length) {
     return;
   }
-  if (state.activeId === id) {
+  const switched = state.activeId === id;
+  if (switched) {
     applySession(remaining[0]);
   }
   state.sessions = remaining;
   renderTabs();
   renderClosedButtons();
-  persistSessions();
-  saveState();
-  if (state.root1 && state.root2 && state.ref1 && state.ref2) {
+  flushSession();
+  if (switched && state.root1 && state.root2 && state.ref1 && state.ref2) {
     loadDiff();
-  } else {
+  } else if (switched) {
     fileTree.innerHTML = '<div class="empty-state">Pick two unique endpoints</div>';
   }
 }
@@ -1004,7 +989,9 @@ function applyEndpoints(data) {
 
   if (!state.id1 && state.root1 && state.ref1) {
     const hit = state.endpoints.find(
-      (e) => rootKey(e.root) === rootKey(state.root1) && e.ref === state.ref1
+      (e) =>
+        EndpointPicker.samePickerRoot(e.root, state.root1, state.pathCaseInsensitive) &&
+        e.ref === state.ref1
     );
     if (hit) {
       state.id1 = hit.id;
@@ -1013,7 +1000,9 @@ function applyEndpoints(data) {
   }
   if (!state.id2 && state.root2 && state.ref2) {
     const hit = state.endpoints.find(
-      (e) => rootKey(e.root) === rootKey(state.root2) && e.ref === state.ref2
+      (e) =>
+        EndpointPicker.samePickerRoot(e.root, state.root2, state.pathCaseInsensitive) &&
+        e.ref === state.ref2
     );
     if (hit) {
       state.id2 = hit.id;

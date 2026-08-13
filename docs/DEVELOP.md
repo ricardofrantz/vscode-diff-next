@@ -9,9 +9,11 @@ src/
   panels/                   sidebar view + editor panel shells
   services/gitService.ts    git via simple-git; normalizeRoot / pathsEqual
   services/fileStatus.ts    the only definition of a changed file's status
+  services/endpointPicker.ts  folder grouping, tab labels, session migrate
   webview/                  HTML / CSS / JS (injected at runtime)
 scripts/smoke-paths.js      path equality smoke (CI)
 scripts/smoke-status.js     file-status vocabulary smoke (CI)
+scripts/smoke-picker.js     folder grouping + session migrate smoke (CI)
 tools/make_icon.py          marketplace icon
 update-extension.ps1        Windows: compile → VSIX → install
 update-extension.sh         Linux / macOS: same
@@ -47,10 +49,13 @@ npm run update:norestart  # you reload the window
 
 ## Endpoints (0.3.0+)
 
-- One dropdown per side; option = unique `(worktree, local ref)`.
-- Label: `{folder} · {ref}` or `{folder} · {ref} (HEAD)`.
+- Catalog: unique `(worktree, local ref)`. Label `{folder} · {ref}` or
+  `{folder} · {ref} (HEAD)`.
+- Picker is folder-then-branch (not a native `<select>`). Helpers live in
+  `services/endpointPicker.ts` and are injected as `EndpointPicker`.
 - D1 one git root per workspace folder · D2 one id per root+ref · D4 no remotes.
 - Build: `GitService.buildEndpoints` after `listWorkspaceRepos`.
+- Sessions persist as `diff-next.sessions`; `diff-next.lastTargets` migrates.
 
 ## Checks before a tag
 
@@ -61,8 +66,9 @@ npm run smoke          # paths + file-status vocabulary
 npm run package        # @vscode/vsce, from devDependencies
 ```
 
-Manual smoke: multi-root workspace, pick two sides, open M / U / D, fold a
-group, discard one path, refresh.
+Manual smoke: multi-root workspace, add a second tab, pick folder then
+branch on each side, switch tabs, refuse closing the last tab, reload the
+window, open M / U / D, fold a group, discard one path, refresh.
 
 ## Release notes
 

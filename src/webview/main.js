@@ -9,10 +9,29 @@ function clampFontSize(n) {
 }
 
 const previousState = vscode.getState();
+const hydrated = previousState && Array.isArray(previousState.sessions) && previousState.sessions.length
+  ? {
+      sessions: previousState.sessions,
+      activeId: previousState.activeId || previousState.sessions[0].id,
+    }
+  : EndpointPicker.migrateSessions(
+      undefined,
+      previousState && previousState.root1 && previousState.root2
+        ? {
+            root1: previousState.root1,
+            ref1: previousState.ref1 || previousState.baseBranch || '',
+            root2: previousState.root2,
+            ref2: previousState.ref2 || previousState.targetBranch || '',
+          }
+        : undefined
+    );
+
 let state = previousState
   ? {
       ...previousState,
       endpoints: previousState.endpoints || [],
+      sessions: hydrated.sessions,
+      activeId: hydrated.activeId,
       id1: previousState.id1 || '',
       id2: previousState.id2 || '',
       root1: previousState.root1 || '',
@@ -30,6 +49,8 @@ let state = previousState
     }
   : {
       endpoints: [],
+      sessions: hydrated.sessions,
+      activeId: hydrated.activeId,
       id1: '',
       id2: '',
       root1: '',
@@ -55,7 +76,25 @@ if (previousState) {
   state.endpoints = previousState.endpoints || [];
 }
 
+let sessionsFromWebview = Boolean(previousState && previousState.sessions && previousState.sessions.length);
+
+function persistSessions() {
+  snapshotActive();
+  vscode.postMessage({
+    command: 'saveSessions',
+    sessions: (state.sessions || []).map((s) => ({
+      id: s.id,
+      root1: s.root1 || '',
+      ref1: s.ref1 || '',
+      root2: s.root2 || '',
+      ref2: s.ref2 || '',
+    })),
+    activeId: state.activeId,
+  });
+}
+
 function saveState() {
+  snapshotActive();
   vscode.setState({
     ...state,
     expandedFolders: Array.from(state.expandedFolders || []),
@@ -65,6 +104,13 @@ function saveState() {
 
 const endpoint1 = document.getElementById('endpoint1');
 const endpoint2 = document.getElementById('endpoint2');
+const endpoint1Label = document.getElementById('endpoint1Label');
+const endpoint2Label = document.getElementById('endpoint2Label');
+const sessionTabs = document.getElementById('sessionTabs');
+const picker = document.getElementById('picker');
+const pickerSearch = document.getElementById('pickerSearch');
+const pickerCrumb = document.getElementById('pickerCrumb');
+const pickerList = document.getElementById('pickerList');
 const swapBtn = document.getElementById('swapBtn');
 const refreshBtn = document.getElementById('refreshBtn');
 const fileTree = document.getElementById('fileTree');
@@ -136,6 +182,87 @@ function applyEndpointId(side, id) {
   return true;
 }
 
+function emptySession(id) {
+  return {
+    id: id || `s-${Date.now()}`,
+    id1: '',
+    id2: '',
+    root1: '',
+    root2: '',
+    ref1: '',
+    ref2: '',
+    label1: '',
+    label2: '',
+    diffFiles: [],
+    commits: [],
+    selectedPath: '',
+    expandedFolders: [],
+    collapsedGroups: [],
+    totalStats: { additions: 0, deletions: 0 },
+    commitQuery: '',
+  };
+}
+
+function getActive() {
+  return (state.sessions || []).find((s) => s.id === state.activeId) || (state.sessions || [])[0];
+}
+
+function snapshotActive() {
+  const s = getActive();
+  if (!s) {
+    return;
+  }
+  s.id1 = state.id1;
+  s.id2 = state.id2;
+  s.root1 = state.root1;
+  s.root2 = state.root2;
+  s.ref1 = state.ref1;
+  s.ref2 = state.ref2;
+  s.label1 = state.label1;
+  s.label2 = state.label2;
+  s.diffFiles = state.diffFiles || [];
+  s.commits = state.commits || [];
+  s.selectedPath = state.selectedPath || '';
+  s.expandedFolders = Array.from(state.expandedFolders || []);
+  s.collapsedGroups = Array.from(state.collapsedGroups || []);
+  s.totalStats = state.totalStats || { additions: 0, deletions: 0 };
+  s.commitQuery = commitSearch ? commitSearch.value : s.commitQuery || '';
+}
+
+function applySession(s) {
+  state.activeId = s.id;
+  state.id1 = s.id1 || '';
+  state.id2 = s.id2 || '';
+  state.root1 = s.root1 || '';
+  state.root2 = s.root2 || '';
+  state.ref1 = s.ref1 || '';
+  state.ref2 = s.ref2 || '';
+  state.label1 = s.label1 || '';
+  state.label2 = s.label2 || '';
+  state.diffFiles = s.diffFiles || [];
+  state.commits = s.commits || [];
+  state.selectedPath = s.selectedPath || '';
+  state.expandedFolders = new Set(s.expandedFolders || []);
+  state.collapsedGroups = new Set(s.collapsedGroups || []);
+  state.totalStats = s.totalStats || { additions: 0, deletions: 0 };
+  if (commitSearch) {
+    commitSearch.value = s.commitQuery || '';
+  }
+}
+
+function folderOf(root, fallback) {
+  const hit = (state.endpoints || []).find((e) =>
+    EndpointPicker.samePickerRoot(e.root, root, state.pathCaseInsensitive)
+  );
+  return (hit && hit.folder) || fallback || '';
+}
+
+function currentTabLabel(s) {
+  const left = folderOf(s.root1, (s.label1 || '').split(' · ')[0]);
+  const right = folderOf(s.root2, (s.label2 || '').split(' · ')[0]);
+  return EndpointPicker.sessionTabLabel(left, right);
+}
+
 function ensureCommitsCollapsed() {
   const header = document.getElementById('commitsHeader');
   const body = document.getElementById('commitsBody');
@@ -149,8 +276,41 @@ function ensureCommitsCollapsed() {
 }
 
 function init() {
-  endpoint1.addEventListener('change', () => onEndpointChange(1));
-  endpoint2.addEventListener('change', () => onEndpointChange(2));
+  const first = getActive();
+  if (first) {
+    applySession(first);
+  }
+  endpoint1.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePicker(1);
+  });
+  endpoint2.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePicker(2);
+  });
+  pickerSearch.addEventListener('input', () => renderPickerList());
+  pickerSearch.addEventListener('keydown', onPickerSearchKey);
+  pickerList.addEventListener('keydown', onPickerListKey);
+  pickerCrumb.addEventListener('click', () => {
+    if (pickerState.step === 2) {
+      pickerState.step = 1;
+      pickerState.folderRoot = '';
+      pickerState.query = '';
+      pickerSearch.value = '';
+      renderPickerList();
+      pickerSearch.focus();
+    }
+  });
+  document.addEventListener('click', (e) => {
+    if (!picker.hidden && !picker.contains(e.target) && e.target !== endpoint1 && e.target !== endpoint2) {
+      closePicker();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !picker.hidden) {
+      closePicker();
+    }
+  });
   swapBtn.addEventListener('click', onSwapSides);
   refreshBtn.addEventListener('click', onRefresh);
   commitSearch.addEventListener('input', onCommitSearch);
@@ -233,6 +393,8 @@ function init() {
 
   initResizer();
 
+  renderTabs();
+  renderClosedButtons();
   if (state.root1 && state.root2) {
     fileTree.innerHTML = '<div class="loading">Restoring last compare…</div>';
   }
@@ -298,75 +460,310 @@ function toggleSection(headerId, bodyId) {
   section.classList.toggle('collapsed');
 }
 
-/**
- * Fill one endpoint select. Peer id is excluded so sides stay unique.
- * Returns the selected id.
- */
-function fillEndpointSelect(select, selectedId, excludeId) {
-  select.innerHTML = '';
-  const list = (state.endpoints || []).filter((e) => e.id !== excludeId);
-  if (!list.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = excludeId ? 'No other endpoint' : 'No endpoints';
-    select.appendChild(opt);
-    return '';
-  }
+const pickerState = {
+  side: 0,
+  step: 1,
+  folderRoot: '',
+  folderName: '',
+  query: '',
+  items: [],
+  active: 0,
+};
 
-  let matched = '';
-  list.forEach((ep) => {
-    const opt = document.createElement('option');
-    opt.value = ep.id;
-    opt.textContent = ep.label;
-    opt.title = `${ep.root}  @  ${ep.ref}`;
-    if (selectedId && ep.id === selectedId) {
-      opt.selected = true;
-      matched = ep.id;
-    }
-    select.appendChild(opt);
-  });
-
-  if (!matched) {
-    matched = list[0].id;
-    select.value = matched;
-  } else {
-    select.value = matched;
+function closedLabel(side) {
+  const label = side === 1 ? state.label1 : state.label2;
+  const root = side === 1 ? state.root1 : state.root2;
+  const ref = side === 1 ? state.ref1 : state.ref2;
+  if (label) {
+    return label;
   }
-  select.title = (findEndpoint(matched) || {}).label || matched;
-  return matched;
+  if (root && ref) {
+    const folder = folderOf(root, '');
+    return folder ? `${folder} · ${ref}` : `${ref}`;
+  }
+  return 'Select folder…';
+}
+
+function renderClosedButtons() {
+  endpoint1Label.textContent = closedLabel(1);
+  endpoint2Label.textContent = closedLabel(2);
+  endpoint1.title = state.root1 ? `${state.root1}  @  ${state.ref1}` : 'Target 1';
+  endpoint2.title = state.root2 ? `${state.root2}  @  ${state.ref2}` : 'Target 2';
 }
 
 function syncSelectsFromState() {
-  // Side 1: all endpoints; side 2: all except id1
-  const id1 = fillEndpointSelect(endpoint1, state.id1, '');
-  applyEndpointId(1, id1);
-  let id2 = fillEndpointSelect(endpoint2, state.id2, state.id1);
-  if (id2 === state.id1) {
-    id2 = fillEndpointSelect(endpoint2, '', state.id1);
-  }
-  applyEndpointId(2, id2);
+  renderClosedButtons();
+  renderTabs();
   updateSideTitles();
   saveState();
 }
 
-function onEndpointChange(side) {
-  if (side === 1) {
-    applyEndpointId(1, endpoint1.value);
-    // Rebuild side 2 without the new peer; keep prior id2 if still valid.
-    const id2 = fillEndpointSelect(endpoint2, state.id2, state.id1);
-    applyEndpointId(2, id2);
-  } else {
-    applyEndpointId(2, endpoint2.value);
-    if (state.id2 === state.id1) {
-      // Should not happen (excluded), but force uniqueness.
-      const id2 = fillEndpointSelect(endpoint2, '', state.id1);
-      applyEndpointId(2, id2);
-    }
+function togglePicker(side) {
+  if (!picker.hidden && pickerState.side === side) {
+    closePicker();
+    return;
   }
+  openPicker(side);
+}
+
+function openPicker(side) {
+  pickerState.side = side;
+  const currentRoot = side === 1 ? state.root1 : state.root2;
+  if (currentRoot) {
+    pickerState.step = 2;
+    pickerState.folderRoot = currentRoot;
+    pickerState.folderName = folderOf(currentRoot, '');
+  } else {
+    pickerState.step = 1;
+    pickerState.folderRoot = '';
+    pickerState.folderName = '';
+  }
+  pickerState.query = '';
+  pickerSearch.value = '';
+  picker.hidden = false;
+  picker.classList.remove('hidden');
+  endpoint1.setAttribute('aria-expanded', side === 1 ? 'true' : 'false');
+  endpoint2.setAttribute('aria-expanded', side === 2 ? 'true' : 'false');
+  renderPickerList();
+  pickerSearch.focus();
+}
+
+function closePicker() {
+  picker.hidden = true;
+  picker.classList.add('hidden');
+  endpoint1.setAttribute('aria-expanded', 'false');
+  endpoint2.setAttribute('aria-expanded', 'false');
+  pickerState.side = 0;
+}
+
+function pickerItems() {
+  const q = pickerSearch.value || '';
+  if (pickerState.step === 1) {
+    const folders = EndpointPicker.uniqueFolders(state.endpoints || []);
+    return EndpointPicker.filterByQuery(folders, q, (f) => f.folder);
+  }
+  const excludeId = pickerState.side === 1 ? state.id2 : state.id1;
+  const branches = EndpointPicker.branchesForFolder(
+    state.endpoints || [],
+    pickerState.folderRoot,
+    excludeId,
+    state.pathCaseInsensitive
+  );
+  return EndpointPicker.filterByQuery(branches, q, (b) => `${b.ref} ${b.label}`);
+}
+
+function renderPickerList() {
+  const items = pickerItems();
+  pickerState.items = items;
+  pickerState.active = 0;
+  if (pickerState.step === 2) {
+    pickerCrumb.textContent = `← ${pickerState.folderName || 'Folders'}`;
+  } else {
+    pickerCrumb.textContent = '';
+  }
+  pickerList.innerHTML = '';
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'picker-empty';
+    empty.textContent = pickerState.step === 1 ? 'No folders' : 'No branches';
+    pickerList.appendChild(empty);
+    return;
+  }
+  items.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'picker-opt' + (i === 0 ? ' active' : '');
+    row.setAttribute('role', 'option');
+    const name = document.createElement('span');
+    name.className = 'picker-opt-name';
+    const meta = document.createElement('span');
+    meta.className = 'picker-opt-meta';
+    if (pickerState.step === 1) {
+      name.textContent = item.folder;
+      meta.textContent = item.branchCount === 1 ? '1 branch' : `${item.branchCount} branches`;
+    } else {
+      name.textContent = item.ref;
+      meta.textContent = item.isHead ? 'HEAD' : '';
+    }
+    row.appendChild(name);
+    row.appendChild(meta);
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      choosePickerItem(i);
+    });
+    pickerList.appendChild(row);
+  });
+}
+
+function highlightPicker(index) {
+  const rows = pickerList.querySelectorAll('.picker-opt');
+  if (!rows.length) {
+    return;
+  }
+  pickerState.active = Math.max(0, Math.min(rows.length - 1, index));
+  rows.forEach((row, i) => {
+    row.classList.toggle('active', i === pickerState.active);
+  });
+  rows[pickerState.active].scrollIntoView({ block: 'nearest' });
+}
+
+function choosePickerItem(index) {
+  const item = pickerState.items[index];
+  if (!item) {
+    return;
+  }
+  if (pickerState.step === 1) {
+    pickerState.step = 2;
+    pickerState.folderRoot = item.root;
+    pickerState.folderName = item.folder;
+    pickerSearch.value = '';
+    renderPickerList();
+    pickerSearch.focus();
+    return;
+  }
+  applyEndpointId(pickerState.side, item.id);
+  if (state.id1 && state.id2 && state.id1 === state.id2) {
+    if (pickerState.side === 2) {
+      state.id2 = '';
+      state.root2 = '';
+      state.ref2 = '';
+      state.label2 = '';
+    }
+    return;
+  }
+  closePicker();
+  renderClosedButtons();
+  renderTabs();
   updateSideTitles();
+  persistSessions();
   saveState();
   if (state.root1 && state.root2 && state.ref1 && state.ref2 && state.id1 !== state.id2) {
     loadDiff();
+  }
+}
+
+function onPickerSearchKey(e) {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    highlightPicker(pickerState.active + 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    highlightPicker(pickerState.active - 1);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    choosePickerItem(pickerState.active);
+  } else if (e.key === 'Backspace' && !pickerSearch.value && pickerState.step === 2) {
+    pickerState.step = 1;
+    pickerState.folderRoot = '';
+    renderPickerList();
+  }
+}
+
+function onPickerListKey(e) {
+  onPickerSearchKey(e);
+}
+
+function renderTabs() {
+  if (!sessionTabs) {
+    return;
+  }
+  sessionTabs.innerHTML = '';
+  (state.sessions || []).forEach((s) => {
+    const tab = document.createElement('div');
+    tab.className = 'session-tab' + (s.id === state.activeId ? ' active' : '');
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', s.id === state.activeId ? 'true' : 'false');
+    const name = document.createElement('span');
+    name.className = 'session-tab-name';
+    name.textContent = currentTabLabel(s);
+    tab.appendChild(name);
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'session-tab-close';
+    close.title = 'Close';
+    close.textContent = '×';
+    close.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeSession(s.id);
+    });
+    tab.appendChild(close);
+    tab.addEventListener('click', () => switchSession(s.id));
+    sessionTabs.appendChild(tab);
+  });
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'session-tab-add';
+  add.title = 'New compare';
+  add.textContent = '+';
+  add.addEventListener('click', addSession);
+  sessionTabs.appendChild(add);
+}
+
+function switchSession(id) {
+  if (id === state.activeId) {
+    return;
+  }
+  closePicker();
+  snapshotActive();
+  const next = (state.sessions || []).find((s) => s.id === id);
+  if (!next) {
+    return;
+  }
+  applySession(next);
+  renderTabs();
+  renderClosedButtons();
+  updateSideTitles();
+  persistSessions();
+  saveState();
+  if (state.diffFiles && state.diffFiles.length) {
+    renderFileTree(state.diffFiles, state.totalStats || { additions: 0, deletions: 0 }, true);
+  } else if (!state.root1 || !state.root2) {
+    fileTree.innerHTML = '<div class="empty-state">Pick two unique endpoints</div>';
+  }
+  if (state.commits && state.commits.length) {
+    renderCommits(state.commits);
+  }
+  if (state.root1 && state.root2 && state.ref1 && state.ref2 && state.id1 !== state.id2) {
+    loadDiff();
+  }
+}
+
+function addSession() {
+  closePicker();
+  snapshotActive();
+  const created = emptySession();
+  state.sessions = (state.sessions || []).concat(created);
+  applySession(created);
+  fileTree.innerHTML = '<div class="empty-state">Pick two unique endpoints</div>';
+  if (commitList) {
+    commitList.innerHTML = '<div class="empty-state">No commits</div>';
+  }
+  state.commits = [];
+  renderTabs();
+  renderClosedButtons();
+  persistSessions();
+  saveState();
+}
+
+function closeSession(id) {
+  if (!EndpointPicker.canCloseSession((state.sessions || []).length)) {
+    return;
+  }
+  const remaining = (state.sessions || []).filter((s) => s.id !== id);
+  if (!remaining.length) {
+    return;
+  }
+  if (state.activeId === id) {
+    applySession(remaining[0]);
+  }
+  state.sessions = remaining;
+  renderTabs();
+  renderClosedButtons();
+  persistSessions();
+  saveState();
+  if (state.root1 && state.root2 && state.ref1 && state.ref2) {
+    loadDiff();
+  } else {
+    fileTree.innerHTML = '<div class="empty-state">Pick two unique endpoints</div>';
   }
 }
 
@@ -387,6 +784,7 @@ function onSwapSides() {
   state.label2 = tmp.label;
 
   syncSelectsFromState();
+  persistSessions();
   if (state.root1 && state.root2 && state.ref1 && state.ref2) {
     loadDiff();
   }
@@ -587,38 +985,30 @@ function applyEndpoints(data) {
     state.endpoints = incoming;
   }
 
-  if (data.id1) {
-    state.id1 = data.id1;
-  }
-  if (data.id2) {
-    state.id2 = data.id2;
-  }
-  if (data.root1) {
-    state.root1 = normalizeRoot(data.root1);
-  }
-  if (data.root2) {
-    state.root2 = normalizeRoot(data.root2);
-  }
-  if (data.ref1) {
-    state.ref1 = data.ref1;
-  }
-  if (data.ref2) {
-    state.ref2 = data.ref2;
-  }
-  if (data.label1) {
-    state.label1 = data.label1;
-  }
-  if (data.label2) {
-    state.label2 = data.label2;
+  if (!sessionsFromWebview && Array.isArray(data.sessions) && data.sessions.length) {
+    const incoming = EndpointPicker.migrateSessions(
+      { sessions: data.sessions, activeId: data.activeId },
+      undefined
+    );
+    state.sessions = incoming.sessions.map((s) => {
+      const existing = (state.sessions || []).find((x) => x.id === s.id);
+      return existing ? { ...existing, ...s } : { ...emptySession(s.id), ...s };
+    });
+    state.activeId = incoming.activeId;
+    const active = getActive();
+    if (active) {
+      applySession(active);
+    }
+    sessionsFromWebview = true;
   }
 
-  // Prefer host ids; fall back to root+ref match from saved state.
   if (!state.id1 && state.root1 && state.ref1) {
     const hit = state.endpoints.find(
       (e) => rootKey(e.root) === rootKey(state.root1) && e.ref === state.ref1
     );
     if (hit) {
       state.id1 = hit.id;
+      state.label1 = hit.label;
     }
   }
   if (!state.id2 && state.root2 && state.ref2) {
@@ -627,6 +1017,7 @@ function applyEndpoints(data) {
     );
     if (hit) {
       state.id2 = hit.id;
+      state.label2 = hit.label;
     }
   }
 

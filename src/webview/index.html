@@ -10,19 +10,33 @@
 <body>
   <div class="container">
     <header class="header">
+      <div class="session-tabs" id="sessionTabs" role="tablist" aria-label="Compare sessions"></div>
       <div class="targets-bar">
         <div class="side side-1" title="Target 1">
-          <select id="endpoint1" class="endpoint-select" aria-label="Target 1"></select>
+          <button type="button" id="endpoint1" class="endpoint-select" aria-label="Target 1" aria-haspopup="listbox" aria-expanded="false">
+            <span class="endpoint-label" id="endpoint1Label">Select folder…</span>
+            <span class="endpoint-caret" aria-hidden="true">▾</span>
+          </button>
         </div>
         <button type="button" id="swapBtn" class="icon-btn swap-btn" title="Swap both sides">
           <span class="icon" aria-hidden="true">⇄</span>
         </button>
         <div class="side side-2" title="Target 2">
-          <select id="endpoint2" class="endpoint-select" aria-label="Target 2"></select>
+          <button type="button" id="endpoint2" class="endpoint-select" aria-label="Target 2" aria-haspopup="listbox" aria-expanded="false">
+            <span class="endpoint-label" id="endpoint2Label">Select folder…</span>
+            <span class="endpoint-caret" aria-hidden="true">▾</span>
+          </button>
         </div>
         <button type="button" id="refreshBtn" class="icon-btn" title="Refresh">
           <span class="icon" aria-hidden="true">↻</span>
         </button>
+      </div>
+      <div id="picker" class="picker hidden" hidden>
+        <div class="picker-search">
+          <input type="text" id="pickerSearch" placeholder="Filter…" aria-label="Filter folders or branches">
+        </div>
+        <div class="picker-crumb" id="pickerCrumb"></div>
+        <div id="pickerList" class="picker-list" role="listbox" tabindex="0"></div>
       </div>
     </header>
 
@@ -71,6 +85,7 @@
   </div>
 
   <script nonce="INJECT_NONCE">/* INJECT_STATUS_TABLE */
+/* INJECT_PICKER */
 /* INJECT_JS */</script>
 </body>
 </html>

@@ -37,6 +37,8 @@ security posture, docs, and day-to-day tooling follow the same bar as
 | Feature | Status |
 | ------- | ------ |
 | Dual targets: any two workspace repos + branches | ✅ |
+| Session tabs: hold several compares at once | ✅ |
+| Folder-then-branch picker (searchable, not a short OS list) | ✅ |
 | SCM-style list (M / U / D / R / C) with foldable groups | ✅ |
 | M → side-by-side diff; U/D → single side; R → old ↔ new | ✅ |
 | Images and PDFs open in their viewer, changed ones side by side | ✅ |
@@ -44,7 +46,7 @@ security posture, docs, and day-to-day tooling follow the same bar as
 | Editable diff + per-change revert arrow (→) when Target 2 is checked out | ✅ |
 | Discard: apply Target 1 → Target 2 worktree (binary-safe) | ✅ |
 | Commit history + search (same-repo only, capped at 1000) | ✅ |
-| Persist last pair + list font size | ✅ |
+| Persist open tabs + last pair + list font size | ✅ |
 | Unicode / unusual filenames | ✅ (`-z` parsing) |
 | Windows / Linux / macOS | ✅ (`git` on `PATH`) |
 
@@ -99,15 +101,19 @@ Marketplace id once published: `RicardoFrantz.diff-next`.
 ## Usage
 
 1. Click **vscode-diff Next** in the activity bar.
-2. Pick **two unique endpoints** (each is `{folder} · {ref}`). HEAD of each
-   workspace folder is listed first; other **local** branches of that folder
-   follow. Remotes are hidden. The two sides can never be the same endpoint.
-3. Click a **Modified (M)** file for a side-by-side diff; **Renamed (R)** diffs
+2. Use **tabs** to keep more than one compare open (`+` adds a tab; each tab
+   is one pair).
+3. Pick each side with the **folder-then-branch** picker: click a target,
+   choose a workspace folder (type to filter), then a **local** branch of
+   that folder. Reopening a side that already has a folder starts on its
+   branches; `←` goes back to folders. Remotes are hidden. The two sides
+   can never be the same endpoint.
+4. Click a **Modified (M)** file for a side-by-side diff; **Renamed (R)** diffs
    the old path against the new one.
-4. Click a **New (U)** or **Deleted (D)** file for a single view.
-5. Click a group header (Modified / New / Deleted / …) to fold that section.
-6. Same-repo only: searchable commit history between the tips.
-7. `↺` applies Target 1's version onto Target 2's worktree (with confirmation);
+5. Click a **New (U)** or **Deleted (D)** file for a single view.
+6. Click a group header (Modified / New / Deleted / …) to fold that section.
+7. Same-repo only: searchable commit history between the tips.
+8. `↺` applies Target 1's version onto Target 2's worktree (with confirmation);
    `↗` opens the Target 2 worktree file.
 
 Command Palette: **vscode-diff Next: Compare Branches** (editor-area panel).

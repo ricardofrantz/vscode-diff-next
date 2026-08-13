@@ -15,6 +15,12 @@ import {
   makeEndpointId,
 } from '../services/gitService';
 import { statusInfo, statusTableScript } from '../services/fileStatus';
+import {
+  migrateSessions,
+  pickerScript,
+  type SavedPair,
+  type SavedSessions,
+} from '../services/endpointPicker';
 
 /** Custom scheme for committed blobs served as virtual read-only files. */
 export const GIT_SHOW_SCHEME = 'diff-next-show';
@@ -45,6 +51,7 @@ type SavedTargets = {
 };
 
 const STATE_KEY = 'diff-next.lastTargets';
+const SESSIONS_KEY = 'diff-next.sessions';
 
 /**
  * Shared host for sidebar and editor panel.
@@ -151,6 +158,7 @@ export class DiffHost {
     // The panel reads the status vocabulary from here rather than keeping its
     // own copy; see services/fileStatus.ts.
     html = html.replace('/* INJECT_STATUS_TABLE */', statusTableScript());
+    html = html.replace('/* INJECT_PICKER */', pickerScript());
     html = html.replace('/* INJECT_CSS */', css);
     html = html.replace('/* INJECT_JS */', js);
     html = html.split('INJECT_NONCE').join(nonce);
@@ -163,6 +171,12 @@ export class DiffHost {
   ): Promise<void> {
     try {
       switch (message.command) {
+        case 'saveSessions':
+          await this.writeSavedSessions({
+            sessions: Array.isArray(message.sessions) ? (message.sessions as SavedPair[]) : [],
+            activeId: String(message.activeId ?? ''),
+          });
+          break;
         case 'getRepos':
         case 'getEndpoints':
           await this.sendEndpoints(
@@ -247,6 +261,38 @@ export class DiffHost {
     };
   }
 
+  private readSavedSessions(): SavedSessions {
+    const raw = this.context?.workspaceState.get<SavedSessions>(SESSIONS_KEY);
+    return migrateSessions(raw, this.readSavedTargets());
+  }
+
+  private applyActivePair(saved: SavedSessions): void {
+    const active = saved.sessions.find((s) => s.id === saved.activeId) || saved.sessions[0];
+    if (active?.root1 && active.root2 && active.ref1 && active.ref2) {
+      this.lastTargets = {
+        root1: normalizeRoot(active.root1),
+        ref1: active.ref1,
+        root2: normalizeRoot(active.root2),
+        ref2: active.ref2,
+      };
+      return;
+    }
+    this.lastTargets = undefined;
+    this.disposeWatchers();
+  }
+
+  private async writeSavedSessions(input: SavedSessions): Promise<void> {
+    if (!this.context) {
+      return;
+    }
+    const saved = migrateSessions(input, undefined);
+    await this.context.workspaceState.update(SESSIONS_KEY, saved);
+    this.applyActivePair(saved);
+    if (this.lastTargets) {
+      await this.writeSavedTargets(this.lastTargets);
+    }
+  }
+
   private async writeSavedTargets(t: SavedTargets): Promise<void> {
     if (!this.context) {
       return;
@@ -316,61 +362,20 @@ export class DiffHost {
     return refs.every((r) => isSafeRef(r));
   }
 
-  private pickEndpoint(
-    preferredRoot: string,
-    preferredRef: string,
-    list: CompareEndpoint[],
-    fallbackIndex: number,
-    excludeId?: string
-  ): CompareEndpoint | undefined {
-    const filtered = excludeId ? list.filter((e) => e.id !== excludeId) : list;
-    if (!filtered.length) {
-      return undefined;
-    }
-    const prefRoot = normalizeRoot(preferredRoot);
-    const prefRef = preferredRef || '';
-    if (prefRoot && prefRef) {
-      const id = makeEndpointId(prefRoot, prefRef);
-      const hit = filtered.find((e) => e.id === id);
-      if (hit) {
-        return hit;
-      }
-    }
-    if (prefRoot) {
-      const head = filtered.find((e) => this.sameRoot(e.root, prefRoot) && e.isHead);
-      if (head) {
-        return head;
-      }
-      const any = filtered.find((e) => this.sameRoot(e.root, prefRoot));
-      if (any) {
-        return any;
-      }
-    }
-    const i = Math.min(Math.max(0, fallbackIndex), filtered.length - 1);
-    return filtered[i];
-  }
-
   private postEndpoints(
     post: WebviewPost,
     endpoints: CompareEndpoint[],
-    ep1: CompareEndpoint | undefined,
-    ep2: CompareEndpoint | undefined,
     partial: boolean
   ): void {
+    const saved = this.readSavedSessions();
     post({
       command: 'endpoints',
       data: {
         endpoints,
-        id1: ep1?.id || '',
-        id2: ep2?.id || '',
-        root1: ep1?.root || '',
-        ref1: ep1?.ref || '',
-        root2: ep2?.root || '',
-        ref2: ep2?.ref || '',
-        label1: ep1?.label || '',
-        label2: ep2?.label || '',
         partial,
         pathCaseInsensitive: PATH_CASE_INSENSITIVE,
+        sessions: saved.sessions,
+        activeId: saved.activeId,
       },
     });
   }
@@ -380,39 +385,36 @@ export class DiffHost {
     preferred: { root1: string; ref1: string; root2: string; ref2: string },
     forceRefresh: boolean
   ): Promise<void> {
-    const saved = this.readSavedTargets();
-    const hint1 = normalizeRoot(preferred.root1 || saved?.root1 || '');
-    const hint2 = normalizeRoot(preferred.root2 || saved?.root2 || '');
-    const hintRef1 = preferred.ref1 || saved?.ref1 || '';
-    const hintRef2 = preferred.ref2 || saved?.ref2 || '';
-
+    const sessions = this.readSavedSessions();
+    const active = sessions.sessions.find((s) => s.id === sessions.activeId) || sessions.sessions[0];
+    const hint1 = normalizeRoot(preferred.root1 || active?.root1 || '');
+    const hint2 = normalizeRoot(preferred.root2 || active?.root2 || '');
     const fast1 = this.looksLikeGitRoot(hint1) ? normalizeRoot(hint1) : '';
     const fast2 = this.looksLikeGitRoot(hint2) ? normalizeRoot(hint2) : '';
 
-    // Starting point: last pair still on disk → endpoints for those roots first.
-    if (!forceRefresh && fast1 && fast2) {
+    if (!forceRefresh && (fast1 || fast2)) {
       try {
-        const seed = [this.repoInfoForRoot(fast1), this.repoInfoForRoot(fast2)];
+        const seed = [fast1, fast2]
+          .filter(Boolean)
+          .map((root) => this.repoInfoForRoot(root));
         this.repos = seed;
         const seedEps = await GitService.buildEndpoints(seed);
         this.endpoints = seedEps;
-        const e1 = this.pickEndpoint(fast1, hintRef1, seedEps, 0);
-        const e2 = this.pickEndpoint(fast2, hintRef2, seedEps, 1, e1?.id);
-        this.postEndpoints(post, seedEps, e1, e2, true);
+        this.postEndpoints(post, seedEps, true);
       } catch {
         // Fall through to full scan.
       }
     }
 
     try {
-      const list = await this.scanAllRepos(forceRefresh || !(fast1 && fast2));
+      const list = await this.scanAllRepos(forceRefresh || !(fast1 || fast2));
       if (list.length === 0) {
         post({
           command: 'error',
           message:
             'No Git repository found in this workspace. Open a multi-root workspace that contains git folders.',
         });
-        this.postEndpoints(post, [], undefined, undefined, false);
+        this.postEndpoints(post, [], false);
         return;
       }
 
@@ -423,20 +425,11 @@ export class DiffHost {
           command: 'error',
           message: 'No local branches found in workspace git folders.',
         });
-        this.postEndpoints(post, [], undefined, undefined, false);
+        this.postEndpoints(post, [], false);
         return;
       }
 
-      const e1 = this.pickEndpoint(hint1 || fast1, hintRef1, endpoints, 0);
-      let e2 = this.pickEndpoint(hint2 || fast2, hintRef2, endpoints, 1, e1?.id);
-      if (!e2 && endpoints.length > 1) {
-        e2 = endpoints.find((e) => e.id !== e1?.id) || endpoints[0];
-      }
-      if (e1 && e2 && e1.id === e2.id && endpoints.length > 1) {
-        e2 = endpoints.find((e) => e.id !== e1.id) || e2;
-      }
-
-      this.postEndpoints(post, endpoints, e1, e2, false);
+      this.postEndpoints(post, endpoints, false);
     } catch (error) {
       post({ command: 'error', message: `Could not list compare endpoints: ${error}` });
     }

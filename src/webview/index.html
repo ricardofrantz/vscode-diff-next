@@ -48,6 +48,16 @@
             <span id="compareContext" class="compare-context"></span>
           </div>
           <div class="header-tools" id="headerTools">
+            <div class="diff-view-tools" id="diffViewTools" title="Compare window">
+              <button type="button" id="wrapBtn" class="diff-view-btn" aria-pressed="true" title="Word wrap">↩</button>
+              <button type="button" id="wsBtn" class="diff-view-btn" aria-pressed="false" title="Ignore whitespace">·</button>
+              <button type="button" id="layoutBtn" class="diff-view-btn" aria-pressed="true" title="Side by side">∥</button>
+              <button type="button" id="collapseBtn" class="diff-view-btn" aria-pressed="false" title="Collapse unchanged">⊟</button>
+              <button type="button" id="pinBtn" class="diff-view-btn" aria-pressed="true" title="Pin tab">◉</button>
+              <button type="button" id="movesBtn" class="diff-view-btn" aria-pressed="true" title="Show moved code">⇄</button>
+              <button type="button" id="prevFileBtn" class="diff-view-btn" title="Previous file">‹</button>
+              <button type="button" id="nextFileBtn" class="diff-view-btn" title="Next file">›</button>
+            </div>
             <div class="font-size-tools" id="fontSizeTools" title="List font size">
               <button type="button" id="fontMinus" class="font-btn" aria-label="Smaller list font">−</button>
               <span id="fontSizeLabel" class="font-size-label">12</span>
@@ -86,6 +96,7 @@
 
   <script nonce="INJECT_NONCE">/* INJECT_STATUS_TABLE */
 /* INJECT_PICKER */
+/* INJECT_DIFF_VIEW */
 /* INJECT_JS */</script>
 </body>
 </html>

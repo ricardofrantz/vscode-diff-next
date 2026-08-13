@@ -109,7 +109,9 @@ Marketplace id once published: `RicardoFrantz.diff-next`.
    branches; `←` goes back to folders. Remotes are hidden. The two sides
    can never be the same endpoint.
 4. Click a **Modified (M)** file for a side-by-side diff; **Renamed (R)** diffs
-   the old path against the new one.
+   the old path against the new one. The compare-window toolbar (wrap,
+   ignore whitespace, side-by-side / inline, collapse unchanged, pin tab,
+   show moved, previous/next file) applies to that editor.
 5. Click a **New (U)** or **Deleted (D)** file for a single view.
 6. Click a group header (Modified / New / Deleted / …) to fold that section.
 7. Same-repo only: searchable commit history between the tips.

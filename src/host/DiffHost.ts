@@ -21,6 +21,12 @@ import {
   type SavedPair,
   type SavedSessions,
 } from '../services/endpointPicker';
+import {
+  DEFAULT_DIFF_VIEW,
+  diffViewScript,
+  normalizeDiffView,
+  type DiffViewPrefs,
+} from '../services/diffView';
 
 /** Custom scheme for committed blobs served as virtual read-only files. */
 export const GIT_SHOW_SCHEME = 'diff-next-show';
@@ -52,6 +58,7 @@ type SavedTargets = {
 
 const STATE_KEY = 'diff-next.lastTargets';
 const SESSIONS_KEY = 'diff-next.sessions';
+const DIFF_VIEW_KEY = 'diff-next.diffView';
 
 /**
  * Shared host for sidebar and editor panel.
@@ -156,6 +163,7 @@ export class DiffHost {
     // own copy; see services/fileStatus.ts.
     html = html.replace('/* INJECT_STATUS_TABLE */', statusTableScript());
     html = html.replace('/* INJECT_PICKER */', pickerScript());
+    html = html.replace('/* INJECT_DIFF_VIEW */', diffViewScript());
     html = html.replace('/* INJECT_CSS */', css);
     html = html.replace('/* INJECT_JS */', js);
     html = html.split('INJECT_NONCE').join(nonce);
@@ -168,6 +176,9 @@ export class DiffHost {
   ): Promise<void> {
     try {
       switch (message.command) {
+        case 'saveDiffView':
+          await this.writeDiffView(normalizeDiffView(message.prefs));
+          break;
         case 'saveSessions':
           await this.writeSavedSessions({
             sessions: Array.isArray(message.sessions) ? (message.sessions as SavedPair[]) : [],
@@ -302,6 +313,29 @@ export class DiffHost {
     });
   }
 
+  private readDiffView(): DiffViewPrefs {
+    return normalizeDiffView(this.context?.workspaceState.get(DIFF_VIEW_KEY) ?? DEFAULT_DIFF_VIEW);
+  }
+
+  private async writeDiffView(prefs: DiffViewPrefs): Promise<void> {
+    if (this.context) {
+      await this.context.workspaceState.update(DIFF_VIEW_KEY, prefs);
+    }
+    await this.applyDiffEditorSettings(prefs);
+  }
+
+  private async applyDiffEditorSettings(prefs: DiffViewPrefs): Promise<void> {
+    const cfg = vscode.workspace.getConfiguration('diffEditor');
+    const target = vscode.ConfigurationTarget.Workspace;
+    await Promise.all([
+      cfg.update('wordWrap', prefs.wordWrap ? 'on' : 'off', target),
+      cfg.update('ignoreTrimWhitespace', prefs.ignoreTrimWhitespace, target),
+      cfg.update('renderSideBySide', prefs.sideBySide, target),
+      cfg.update('hideUnchangedRegions.enabled', prefs.collapseUnchanged, target),
+      cfg.update('experimental.showMoves', prefs.showMoves, target),
+    ]);
+  }
+
   private looksLikeGitRoot(root: string): boolean {
     const r = normalizeRoot(root);
     if (!r) {
@@ -373,6 +407,7 @@ export class DiffHost {
         pathCaseInsensitive: PATH_CASE_INSENSITIVE,
         sessions: saved.sessions,
         activeId: saved.activeId,
+        diffView: this.readDiffView(),
       },
     });
   }
@@ -605,9 +640,23 @@ export class DiffHost {
         ? `${this.endpointLabel(b.root, b.ref)} · Working Tree`
         : this.endpointLabel(b.root, b.ref);
       const title = `${path.basename(filePath)} (${this.endpointLabel(a.root, a.ref)} ↔ ${rightLabel})`;
-      await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
+      const prefs = this.readDiffView();
+      await this.applyDiffEditorSettings(prefs);
+      await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, {
+        preview: !prefs.pinTab,
+      });
+      await this.jumpToFirstChange();
     } catch (error) {
       void vscode.window.showErrorMessage(`Could not open file: ${error}`);
+    }
+  }
+
+  private async jumpToFirstChange(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    try {
+      await vscode.commands.executeCommand('workbench.action.compareEditor.nextChange');
+    } catch {
+      // Command missing on older VS Code — the file still opens.
     }
   }
 

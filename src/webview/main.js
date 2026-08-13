@@ -77,6 +77,7 @@ if (previousState) {
 }
 
 let sessionsFromWebview = Boolean(previousState && previousState.sessions && previousState.sessions.length);
+state.diffView = normalizeDiffView(previousState && previousState.diffView);
 
 function persistSessions() {
   vscode.postMessage({
@@ -128,6 +129,14 @@ const commitsTitle = document.getElementById('commitsTitle');
 const fontMinus = document.getElementById('fontMinus');
 const fontPlus = document.getElementById('fontPlus');
 const fontSizeLabel = document.getElementById('fontSizeLabel');
+const wrapBtn = document.getElementById('wrapBtn');
+const wsBtn = document.getElementById('wsBtn');
+const layoutBtn = document.getElementById('layoutBtn');
+const collapseBtn = document.getElementById('collapseBtn');
+const pinBtn = document.getElementById('pinBtn');
+const movesBtn = document.getElementById('movesBtn');
+const prevFileBtn = document.getElementById('prevFileBtn');
+const nextFileBtn = document.getElementById('nextFileBtn');
 
 function targetsPayload(extra) {
   return {
@@ -320,6 +329,23 @@ function init() {
   if (fontTools) {
     fontTools.addEventListener('click', (e) => e.stopPropagation());
   }
+  const diffTools = document.getElementById('diffViewTools');
+  if (diffTools) {
+    diffTools.addEventListener('click', (e) => e.stopPropagation());
+  }
+  bindDiffViewBtn(wrapBtn, 'wordWrap');
+  bindDiffViewBtn(wsBtn, 'ignoreTrimWhitespace');
+  bindDiffViewBtn(layoutBtn, 'sideBySide');
+  bindDiffViewBtn(collapseBtn, 'collapseUnchanged');
+  bindDiffViewBtn(pinBtn, 'pinTab');
+  bindDiffViewBtn(movesBtn, 'showMoves');
+  if (prevFileBtn) {
+    prevFileBtn.addEventListener('click', () => openNeighborFile(-1));
+  }
+  if (nextFileBtn) {
+    nextFileBtn.addEventListener('click', () => openNeighborFile(1));
+  }
+  renderDiffViewButtons();
   applyListFontSize();
 
   ensureCommitsCollapsed();
@@ -956,9 +982,56 @@ function applyListFontSize() {
   }
 }
 
+function bindDiffViewBtn(btn, key) {
+  if (!btn) {
+    return;
+  }
+  btn.addEventListener('click', () => {
+    state.diffView = normalizeDiffView({
+      ...state.diffView,
+      [key]: !state.diffView[key],
+    });
+    renderDiffViewButtons();
+    saveState();
+    vscode.postMessage({ command: 'saveDiffView', prefs: state.diffView });
+  });
+}
+
+function renderDiffViewButtons() {
+  const p = normalizeDiffView(state.diffView);
+  state.diffView = p;
+  setPressed(wrapBtn, p.wordWrap);
+  setPressed(wsBtn, p.ignoreTrimWhitespace);
+  setPressed(layoutBtn, p.sideBySide);
+  setPressed(collapseBtn, p.collapseUnchanged);
+  setPressed(pinBtn, p.pinTab);
+  setPressed(movesBtn, p.showMoves);
+}
+
+function setPressed(btn, on) {
+  if (btn) {
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+}
+
+function changedPaths() {
+  return (state.diffFiles || []).map((f) => f.path).filter(Boolean);
+}
+
+function openNeighborFile(delta) {
+  const next = neighborPath(changedPaths(), state.selectedPath || '', delta);
+  if (next) {
+    selectPath(next, true);
+  }
+}
+
 function applyEndpoints(data) {
   if (typeof data.pathCaseInsensitive === 'boolean') {
     state.pathCaseInsensitive = data.pathCaseInsensitive;
+  }
+  if (data.diffView) {
+    state.diffView = normalizeDiffView(data.diffView);
+    renderDiffViewButtons();
   }
 
   const incoming = data.endpoints || [];

@@ -10,10 +10,12 @@ src/
   services/gitService.ts    git via simple-git; normalizeRoot / pathsEqual
   services/fileStatus.ts    the only definition of a changed file's status
   services/endpointPicker.ts  folder grouping, tab labels, session migrate
+  services/diffView.ts        compare-window prefs (wrap, layout, next file)
   webview/                  HTML / CSS / JS (injected at runtime)
 scripts/smoke-paths.js      path equality smoke (CI)
 scripts/smoke-status.js     file-status vocabulary smoke (CI)
 scripts/smoke-picker.js     folder grouping + session migrate smoke (CI)
+scripts/smoke-diff-view.js  compare-window prefs + next/prev path smoke (CI)
 tools/make_icon.py          marketplace icon
 update-extension.ps1        Windows: compile → VSIX → install
 update-extension.sh         Linux / macOS: same

@@ -2,7 +2,7 @@
   "name": "diff-next",
   "displayName": "vscode-diff Next",
   "description": "Compare Git branches or two workspace repos in VS Code: dual targets, file tree, commit history (same-repo), built-in diffs.",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "publisher": "RicardoFrantz",
   "license": "MIT",
   "icon": "icon.png",
@@ -62,17 +62,24 @@
       "editor/context": [
         {
           "command": "diff-next.commentSelection",
-          "when": "editorHasSelection",
+          "when": "editorHasSelection || isInDiffEditor",
           "group": "diff-next@1"
         }
       ],
       "commandPalette": [
         {
-          "command": "diff-next.commentSelection",
-          "when": "editorHasSelection"
+          "command": "diff-next.commentSelection"
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "diff-next.commentSelection",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m",
+        "when": "editorTextFocus || isInDiffEditor"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {

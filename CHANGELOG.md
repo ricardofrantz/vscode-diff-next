@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.7
+
+Commenting a selection is easier to find and no longer depends on focus staying in the compare.
+
+- Command Palette always lists **Comment selection for agent**.
+- Shortcut: Ctrl+Alt+M (Cmd+Alt+M on Mac).
+- Compare view has a **Comment** button. The last compare selection is kept if the sidebar takes focus.
+
 ## 0.7.6
 
 Select text in a compare and leave a comment for an agent.

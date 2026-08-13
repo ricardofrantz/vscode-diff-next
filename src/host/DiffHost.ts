@@ -176,6 +176,9 @@ export class DiffHost {
   ): Promise<void> {
     try {
       switch (message.command) {
+        case 'commentSelection':
+          await vscode.commands.executeCommand('diff-next.commentSelection');
+          break;
         case 'saveDiffView':
           await this.writeDiffView(normalizeDiffView(message.prefs));
           break;

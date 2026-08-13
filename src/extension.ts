@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { commentSelection } from './commands/commentSelection';
+import { commentSelection, rememberTextEditor } from './commands/commentSelection';
 import { BranchDiffPanel } from './panels/BranchDiffPanel';
 import { BranchDiffViewProvider } from './panels/BranchDiffViewProvider';
 import { GIT_SHOW_SCHEME, GitBlobFileSystemProvider } from './host/DiffHost';
@@ -30,6 +30,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('diff-next.commentSelection', () =>
       commentSelection(context)
     )
+  );
+
+  rememberTextEditor(vscode.window.activeTextEditor);
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => rememberTextEditor(editor))
   );
 }
 

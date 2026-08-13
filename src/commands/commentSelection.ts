@@ -10,6 +10,30 @@ import {
 
 const LAST_TARGETS_KEY = 'diff-next.lastTargets';
 
+let lastTextEditor: vscode.TextEditor | undefined;
+
+/** Remember the last compare/text editor so a sidebar click can still comment. */
+export function rememberTextEditor(editor: vscode.TextEditor | undefined): void {
+  if (!editor) {
+    return;
+  }
+  if (editor.document.uri.scheme === 'output' || editor.document.uri.scheme === 'debug') {
+    return;
+  }
+  lastTextEditor = editor;
+}
+
+function editorForComment(): vscode.TextEditor | undefined {
+  const active = vscode.window.activeTextEditor;
+  if (active && !active.selection.isEmpty) {
+    return active;
+  }
+  if (lastTextEditor && !lastTextEditor.selection.isEmpty) {
+    return lastTextEditor;
+  }
+  return active ?? lastTextEditor;
+}
+
 /**
  * Capture the current editor selection plus a typed note, and write JSON
  * the user can hand to an agent.
@@ -17,7 +41,7 @@ const LAST_TARGETS_KEY = 'diff-next.lastTargets';
 export async function commentSelection(
   context: vscode.ExtensionContext
 ): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
+  const editor = editorForComment();
   if (!editor || editor.selection.isEmpty) {
     void vscode.window.showWarningMessage(
       'Select the text you want to comment on in the compare, then run this again.'
@@ -41,7 +65,7 @@ export async function commentSelection(
   const loc = locateSelection(editor, context);
   if (!loc) {
     void vscode.window.showWarningMessage(
-      'Could not tell which file this selection is in. Open the compare from vscode-diff Next and try again.'
+      'Open a folder or a vscode-diff Next compare, then try the comment again.'
     );
     return;
   }
@@ -66,16 +90,21 @@ export async function commentSelection(
   const indexUri = vscode.Uri.file(path.join(loc.root, '.diff-next', 'review.json'));
   const commentUri = vscode.Uri.joinPath(outDir, commentFileName(entry));
 
-  await vscode.workspace.fs.createDirectory(outDir);
-  const body = Buffer.from(`${JSON.stringify(entry, null, 2)}\n`, 'utf8');
-  await vscode.workspace.fs.writeFile(commentUri, body);
+  try {
+    await vscode.workspace.fs.createDirectory(outDir);
+    const body = Buffer.from(`${JSON.stringify(entry, null, 2)}\n`, 'utf8');
+    await vscode.workspace.fs.writeFile(commentUri, body);
 
-  const existing = await readJson(indexUri);
-  const index = mergeReviewIndex(existing, entry);
-  await vscode.workspace.fs.writeFile(
-    indexUri,
-    Buffer.from(`${JSON.stringify(index, null, 2)}\n`, 'utf8')
-  );
+    const existing = await readJson(indexUri);
+    const index = mergeReviewIndex(existing, entry);
+    await vscode.workspace.fs.writeFile(
+      indexUri,
+      Buffer.from(`${JSON.stringify(index, null, 2)}\n`, 'utf8')
+    );
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Could not save the comment: ${error}`);
+    return;
+  }
 
   const pick = await vscode.window.showInformationMessage(
     `Saved comment on ${entry.file}:${entry.startLine}.`,
@@ -109,19 +138,42 @@ function locateSelection(
       ...(compare ? { compare } : {}),
     };
   }
-  if (editor.document.uri.scheme === 'file' && compare) {
+  if (editor.document.uri.scheme === 'file') {
     const abs = editor.document.uri.fsPath;
-    const root = compare.root2;
-    const rel = path.relative(root, abs).replace(/\\/g, '/');
-    if (!rel || rel.startsWith('..')) {
-      return null;
+    const roots = [compare?.root2, compare?.root1, ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath)].filter(
+      Boolean
+    ) as string[];
+    for (const root of roots) {
+      const rel = path.relative(root, abs).replace(/\\/g, '/');
+      if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+        return {
+          file: rel,
+          side,
+          root,
+          ref: root === compare?.root1 ? compare.ref1 : compare?.root2 === root ? compare.ref2 : 'HEAD',
+          ...(compare ? { compare } : {}),
+        };
+      }
     }
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (folder) {
+      return {
+        file: path.basename(abs),
+        side,
+        root: folder,
+        ref: 'HEAD',
+        ...(compare ? { compare } : {}),
+      };
+    }
+  }
+  const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (folder) {
     return {
-      file: rel,
-      side: 'right',
-      root,
-      ref: compare.ref2,
-      compare,
+      file: path.basename(editor.document.uri.path) || 'selection',
+      side,
+      root: folder,
+      ref: 'HEAD',
+      ...(compare ? { compare } : {}),
     };
   }
   return null;

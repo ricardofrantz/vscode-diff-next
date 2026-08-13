@@ -345,6 +345,12 @@ function init() {
   if (nextFileBtn) {
     nextFileBtn.addEventListener('click', () => openNeighborFile(1));
   }
+  const commentBtn = document.getElementById('commentBtn');
+  if (commentBtn) {
+    commentBtn.addEventListener('click', () => {
+      vscode.postMessage({ command: 'commentSelection' });
+    });
+  }
   renderDiffViewButtons();
   applyListFontSize();
 

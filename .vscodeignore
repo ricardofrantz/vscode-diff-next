@@ -1,4 +1,7 @@
 .vscode/**
+.diff-next/**
+**/*.comment.json
+**/*-rev.json
 .vscode-test/**
 .github/**
 .work/**

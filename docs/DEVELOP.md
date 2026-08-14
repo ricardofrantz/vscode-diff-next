@@ -11,6 +11,8 @@ src/
   services/fileStatus.ts    the only definition of a changed file's status
   services/endpointPicker.ts  folder grouping, tab labels, session migrate
   services/diffView.ts        compare-window prefs (wrap, layout, next file)
+  services/reviewComment.ts   slim sibling `{name}-rev.json`
+  commands/commentSelection.ts  Layout A strip on the selection
   webview/                  HTML / CSS / JS (injected at runtime)
 scripts/smoke-paths.js      path equality smoke (CI)
 scripts/smoke-status.js     file-status vocabulary smoke (CI)

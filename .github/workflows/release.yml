@@ -94,7 +94,7 @@ jobs:
         run: |
           npm run lint
           npm run compile
-          node scripts/smoke-paths.js
+          npm run smoke
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
@@ -184,12 +184,28 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
+          # This job only runs when publishing was asked for, so a missing PAT
+          # is a broken release, not a reason to pass quietly.
           if [ -z "$VSCE_PAT" ]; then
-            echo "Marketplace publish skipped: VSCE_PAT is not configured (add it once the extension is registered)."
-            exit 0
+            echo "::error::VSCE_PAT is not set. Add the Azure DevOps PAT (Marketplace > Manage, all accessible organizations) as a repository or marketplace-publish environment secret named exactly VSCE_PAT."
+            exit 1
           fi
           VSIX="$(ls diff-next-*.vsix | head -n 1)"
           npx --yes @vscode/vsce publish --packagePath "$VSIX" -p "$VSCE_PAT"
+
+      - name: Confirm the Marketplace serves this version
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            LIVE="$(npx --yes @vscode/vsce show RicardoFrantz.diff-next --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).versions[0].version))}catch{process.stdout.write("")}})')"
+            if [ "$LIVE" = "$VERSION" ]; then
+              echo "Marketplace is serving $VERSION."
+              exit 0
+            fi
+            echo "Attempt $attempt: Marketplace reports '${LIVE:-unknown}', waiting for $VERSION."
+            sleep 30
+          done
+          echo "::warning::Publish succeeded but the Marketplace still does not list $VERSION. Indexing can lag; check https://marketplace.visualstudio.com/items?itemName=RicardoFrantz.diff-next"
 
       - name: Publish to Open VSX
         env:

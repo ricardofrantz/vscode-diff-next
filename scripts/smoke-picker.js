@@ -10,7 +10,12 @@ let uniqueFolders;
 let filterByQuery;
 let branchesForFolder;
 let sessionTabLabel;
+let sessionDisplayName;
 let canCloseSession;
+let moveSession;
+let duplicateSession;
+let closeSessions;
+let pickerStartRoot;
 let migrateSessions;
 let pickerScript;
 
@@ -21,7 +26,12 @@ try {
     filterByQuery,
     branchesForFolder,
     sessionTabLabel,
+    sessionDisplayName,
     canCloseSession,
+    moveSession,
+    duplicateSession,
+    closeSessions,
+    pickerStartRoot,
     migrateSessions,
     pickerScript,
   } = mod);
@@ -110,6 +120,76 @@ const empty = migrateSessions(undefined, undefined);
 assert.strictEqual(empty.sessions.length, 1);
 assert.strictEqual(empty.sessions[0].root1, '');
 
+const named = migrateSessions(
+  { sessions: [{ id: 'x', root1: '/1', ref1: 'a', root2: '/2', ref2: 'b', name: 'api vs main' }], activeId: 'x' },
+  undefined
+);
+assert.strictEqual(named.sessions[0].name, 'api vs main', 'a renamed tab must survive a round trip through storage');
+const blankName = migrateSessions(
+  { sessions: [{ id: 'x', root1: '/1', ref1: 'a', root2: '/2', ref2: 'b', name: '   ' }], activeId: 'x' },
+  undefined
+);
+assert.ok(!('name' in blankName.sessions[0]), 'a blank name is dropped, not stored');
+
+// --- reordering -----------------------------------------------------------
+const tabs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+assert.deepStrictEqual(moveSession(tabs, 2, 0).map((t) => t.id), ['c', 'a', 'b']);
+assert.deepStrictEqual(moveSession(tabs, 0, 2).map((t) => t.id), ['b', 'c', 'a']);
+assert.deepStrictEqual(moveSession(tabs, 1, 1).map((t) => t.id), ['a', 'b', 'c']);
+assert.deepStrictEqual(moveSession(tabs, 5, 0).map((t) => t.id), ['a', 'b', 'c']);
+assert.deepStrictEqual(moveSession(tabs, 0, -1).map((t) => t.id), ['a', 'b', 'c']);
+assert.deepStrictEqual(tabs.map((t) => t.id), ['a', 'b', 'c'], 'moveSession must not mutate its input');
+
+// --- duplicate ------------------------------------------------------------
+const pair = [{ id: 'a', root1: '/1', ref1: 'main', root2: '/1', ref2: 'dev' }, { id: 'b' }];
+const dupped = duplicateSession(pair, 'a', 'a2');
+assert.deepStrictEqual(dupped.map((t) => t.id), ['a', 'a2', 'b'], 'the copy lands right after its source');
+assert.strictEqual(dupped[1].ref2, 'dev', 'the copy carries both endpoints');
+assert.ok(!('name' in dupped[1]) || !dupped[1].name, 'an unnamed tab copies without inventing a name');
+assert.strictEqual(duplicateSession([{ id: 'a', name: 'api' }], 'a', 'a2')[1].name, 'api (2)');
+assert.strictEqual(duplicateSession(pair, 'missing', 'x').length, 2);
+
+// --- close modes ----------------------------------------------------------
+const four = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+const others = closeSessions(four, 'a', 'others', 'c');
+assert.deepStrictEqual(others.sessions.map((t) => t.id), ['c']);
+assert.strictEqual(others.activeId, 'c', 'closing the others makes the survivor active');
+const right = closeSessions(four, 'd', 'right', 'b');
+assert.deepStrictEqual(right.sessions.map((t) => t.id), ['a', 'b']);
+assert.strictEqual(right.activeId, 'b', 'the active tab was closed, so focus falls back');
+const rightKeepsActive = closeSessions(four, 'a', 'right', 'b');
+assert.strictEqual(rightKeepsActive.activeId, 'a', 'an untouched active tab keeps focus');
+const one = closeSessions(four, 'b', 'one', 'b');
+assert.deepStrictEqual(one.sessions.map((t) => t.id), ['a', 'c', 'd']);
+assert.strictEqual(one.activeId, 'c', 'closing the active tab moves to its right neighbour');
+const last = closeSessions([{ id: 'a' }], 'a', 'one', 'a');
+assert.deepStrictEqual(last.sessions.map((t) => t.id), ['a'], 'the last tab can never be closed');
+assert.deepStrictEqual(closeSessions(four, 'a', 'others', 'nope').sessions.length, 4);
+
+// --- tab names ------------------------------------------------------------
+assert.strictEqual(sessionDisplayName('api vs main', 'pdf-next', 'pth-main'), 'api vs main');
+assert.strictEqual(sessionDisplayName('  ', 'pdf-next', 'pth-main'), 'pdf-next · pth-main');
+assert.strictEqual(sessionDisplayName('', '', ''), 'New compare');
+
+// --- folder carried into the other box ------------------------------------
+assert.strictEqual(
+  pickerStartRoot(2, '/ws/pdf-next', '', ''),
+  '/ws/pdf-next',
+  'box 2 opens on the folder box 1 is already using'
+);
+assert.strictEqual(
+  pickerStartRoot(2, '/ws/pdf-next', '/ws/pth-main', ''),
+  '/ws/pth-main',
+  'an explicit choice on this side is never overridden'
+);
+assert.strictEqual(
+  pickerStartRoot(1, '', '', '/ws/last'),
+  '/ws/last',
+  'a brand-new tab inherits the folder you were last in'
+);
+assert.strictEqual(pickerStartRoot(1, '', '', ''), '', 'with nothing to go on, show the folder list');
+assert.strictEqual(pickerStartRoot(1, '/ws/a/', '', ''), '/ws/a', 'the start root comes back normalized');
+
 const webviewDir = path.join(__dirname, '..', 'src', 'webview');
 const mainJs = fs.readFileSync(path.join(webviewDir, 'main.js'), 'utf-8');
 const indexHtml = fs.readFileSync(path.join(webviewDir, 'index.html'), 'utf-8');
@@ -151,5 +231,10 @@ assert.strictEqual(typeof sandboxed.uniqueFolders, 'function');
 assert.strictEqual(sandboxed.uniqueFolders(endpoints).length, 3);
 assert.strictEqual(sandboxed.sessionTabLabel('a', 'a'), 'a');
 assert.strictEqual(sandboxed.canCloseSession(1), false);
+for (const name of ['moveSession', 'duplicateSession', 'closeSessions', 'pickerStartRoot', 'sessionDisplayName']) {
+  assert.strictEqual(typeof sandboxed[name], 'function', `the panel needs ${name} injected`);
+}
+assert.deepStrictEqual(sandboxed.moveSession([{ id: 'a' }, { id: 'b' }], 1, 0).map((t) => t.id), ['b', 'a']);
+assert.strictEqual(sandboxed.pickerStartRoot(2, '/ws/x', '', ''), '/ws/x');
 
 console.log('smoke-picker: ok');

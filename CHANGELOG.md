@@ -1,5 +1,89 @@
 # Changelog
 
+## 0.10.0
+
+Tabs behave like editor tabs, and the picker remembers the folder you are in.
+
+- **Drag a tab** to reorder the strip; the order survives a reload. `Ctrl+Shift+←`
+  and `Ctrl+Shift+→` do the same from the keyboard.
+- **Double-click a tab** (or `F2`) to rename it. Clearing the name brings back the
+  `folder · folder` label.
+- **Right-click a tab** for Rename, Duplicate, Close, Close others, and Close to
+  the right. The last tab can still never be closed.
+- **The second box starts on the folder the first box is using**, so comparing two
+  branches of one repo is two clicks. An explicit folder on that side is never
+  overridden, and the `←` crumb still gets you back to the folder list.
+- A new tab from `+` opens on the folder you were last working in.
+
+## 0.9.2
+
+A thicker strip, real icons, and amber on everything you have already noted.
+
+- The row reads `💾 Save · ◉ fix ◯ improve ◯ explain ◯ re-check ◯ discuss ·
+  🗑 Delete`. Delete sits last because deleting is the rare move.
+- Every tag is a radio you click. `fix` is armed on every new note.
+- The armed tag rides inside the note box as `{fix}`, so it is never a lookup
+  away. The box itself has real padding and a 20-character minimum width.
+- **Saved notes turn the text amber** — a wash that stays warm on top of the
+  diff's green, an amber rail, a mark in the scrollbar, and a `{fix}` chip at
+  the end of the range.
+- Hovering an amber range shows the tag, the lines, the note, and Delete.
+
+## 0.9.1
+
+The strip now looks like part of the editor and stops holding the keyboard.
+
+- Note, rail, and tag chip take their colours from the theme instead of a fixed
+  cream and gold, so they read the same in dark and light.
+- The note sits after the first selected line instead of in front of it, so the
+  code no longer shifts sideways while you type.
+- Typing is captured only while the caret is still on the selection. Click
+  anywhere else and the keys go back to the file.
+- Clicking a tag no longer re-opens the document, so a compare stays a compare.
+- Toolbar reads `✓ Save  ✕  fix improve explain re-check discuss`, with a small
+  dot on the active tag.
+- A long note scrolls with the caret instead of freezing at the first 120
+  characters.
+
+## 0.9.0
+
+Notes sit on the selected lines as a small strip, not the native comment box.
+
+- Save, Delete, and the tags (`fix` `improve` `explain` `re-check` `discuss`) are one row on top of the note.
+- Type the note on the selection. Enter saves, Esc discards, and the strip collapses so the next range is free.
+- Click a tag to mark it. It does not save until you press Enter or Save.
+
+## 0.8.1
+
+The comment box is smaller and gets out of the way after a save.
+
+- **Save** and **Delete** sit on the top left of the selected text, then the tags.
+- Saving collapses the box so the next range is free to mark.
+- Delete discards a draft, or removes a saved note from the `-rev.json` file.
+
+## 0.8.0
+
+The first saved comment creates a revision file next to the source.
+
+- `myfile.md` → `myfile-rev.json` (same folder). Later notes append to that file.
+- Each note has `selected_text`, `range` (`14-21`, inclusive), `tag`, and `comment`.
+- Works in a compare and in ordinary files on disk.
+
+## 0.7.9
+
+Each comment is tagged for Claude / Codex.
+
+- The inline box has **fix**, **improve**, **explain**, **re-check**, **discuss**.
+- `{name}.comment.json` next to the file holds `selected_text`, `line`, `tag`, and `comment`.
+
+## 0.7.8
+
+Comments sit on the selected line and write a tiny sibling file.
+
+- Selecting text in a compare shows **Add comment** above that selection.
+- The note is typed in the inline box on that line, not a top input.
+- The file is `{name}.comment.json` next to the reviewed file, with only `selectedText` and `comment`.
+
 ## 0.7.7
 
 Commenting a selection is easier to find and no longer depends on focus staying in the compare.

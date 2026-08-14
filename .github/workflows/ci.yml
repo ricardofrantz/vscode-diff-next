@@ -46,11 +46,10 @@ jobs:
       - name: Compile
         run: npm run compile
 
-      - name: Path helpers smoke
-        run: node scripts/smoke-paths.js
-
-      - name: File status vocabulary smoke
-        run: node scripts/smoke-status.js
+      - name: Smoke
+        # Every smoke script, so picker, diff-view and review-comment
+        # regressions are caught here and not after a publish.
+        run: npm run smoke
 
       - name: Audit production dependencies
         # Platform-independent; run once per workflow.

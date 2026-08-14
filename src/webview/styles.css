@@ -71,10 +71,74 @@ body {
   border-color: var(--vscode-panel-border, #3c3c3c);
 }
 
+.session-tab:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -1px;
+}
+
+.session-tab.dragging {
+  opacity: 0.45;
+}
+
+.session-tab.drop-before {
+  box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #007fd4);
+}
+
+.session-tab.drop-after {
+  box-shadow: inset -2px 0 0 var(--vscode-focusBorder, #007fd4);
+}
+
 .session-tab-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-tab-rename {
+  width: 90px;
+  height: 16px;
+  padding: 0 2px;
+  border: 1px solid var(--vscode-focusBorder, #007fd4);
+  border-radius: 2px;
+  background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, #cccccc);
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.tab-menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 4px 0;
+  border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, #3c3c3c));
+  border-radius: 4px;
+  background: var(--vscode-menu-background, #252526);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+
+.tab-menu-item {
+  border: none;
+  background: transparent;
+  color: var(--vscode-menu-foreground, #cccccc);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+
+.tab-menu-item:hover:not(.off) {
+  background: var(--vscode-menu-selectionBackground, #04395e);
+  color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.tab-menu-item.off {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .session-tab-close {

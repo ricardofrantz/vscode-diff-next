@@ -2,7 +2,7 @@
   "name": "diff-next",
   "displayName": "vscode-diff Next",
   "description": "Compare Git branches or two workspace repos in VS Code: dual targets, file tree, commit history (same-repo), built-in diffs.",
-  "version": "0.7.7",
+  "version": "0.10.0",
   "publisher": "RicardoFrantz",
   "license": "MIT",
   "icon": "icon.png",
@@ -54,8 +54,23 @@
       },
       {
         "command": "diff-next.commentSelection",
-        "title": "vscode-diff Next: Comment selection for agent",
+        "title": "vscode-diff Next: Add comment",
         "icon": "$(comment)"
+      },
+      {
+        "command": "diff-next.saveComment",
+        "title": "Save",
+        "icon": "$(save)",
+        "enablement": "diffNext.noteDraft"
+      },
+      {
+        "command": "diff-next.deleteComment",
+        "title": "Delete",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "diff-next.pickCommentTag",
+        "title": "Tag"
       }
     ],
     "menus": {
@@ -69,6 +84,18 @@
       "commandPalette": [
         {
           "command": "diff-next.commentSelection"
+        },
+        {
+          "command": "diff-next.saveComment",
+          "when": "false"
+        },
+        {
+          "command": "diff-next.deleteComment",
+          "when": "false"
+        },
+        {
+          "command": "diff-next.pickCommentTag",
+          "when": "false"
         }
       ]
     },
@@ -78,6 +105,16 @@
         "key": "ctrl+alt+m",
         "mac": "cmd+alt+m",
         "when": "editorTextFocus || isInDiffEditor"
+      },
+      {
+        "command": "diff-next.saveComment",
+        "key": "enter",
+        "when": "diffNext.noteDraft && editorTextFocus"
+      },
+      {
+        "command": "diff-next.deleteComment",
+        "key": "escape",
+        "when": "diffNext.noteDraft && editorTextFocus"
       }
     ],
     "viewsContainers": {

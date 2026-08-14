@@ -40,6 +40,7 @@ let state = previousState
       ref2: previousState.ref2 || previousState.targetBranch || '',
       label1: previousState.label1 || '',
       label2: previousState.label2 || '',
+      lastFolderRoot: previousState.lastFolderRoot || '',
       expandedFolders: new Set(previousState.expandedFolders || []),
       collapsedGroups: new Set(previousState.collapsedGroups || []),
       pathCaseInsensitive:
@@ -59,6 +60,7 @@ let state = previousState
       ref2: '',
       label1: '',
       label2: '',
+      lastFolderRoot: '',
       diffFiles: [],
       commits: [],
       expandedFolders: new Set(),
@@ -88,6 +90,7 @@ function persistSessions() {
       ref1: s.ref1 || '',
       root2: s.root2 || '',
       ref2: s.ref2 || '',
+      name: s.name || '',
     })),
     activeId: state.activeId,
   });
@@ -112,6 +115,8 @@ const endpoint2 = document.getElementById('endpoint2');
 const endpoint1Label = document.getElementById('endpoint1Label');
 const endpoint2Label = document.getElementById('endpoint2Label');
 const sessionTabs = document.getElementById('sessionTabs');
+let dragFrom = -1;
+let tabMenu = null;
 const picker = document.getElementById('picker');
 const pickerSearch = document.getElementById('pickerSearch');
 const pickerCrumb = document.getElementById('pickerCrumb');
@@ -180,9 +185,14 @@ function applyEndpointId(side, id) {
   return true;
 }
 
+function newSessionId() {
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function emptySession(id) {
   return {
-    id: id || `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    id: id || newSessionId(),
+    name: '',
     id1: '',
     id2: '',
     root1: '',
@@ -260,7 +270,7 @@ function folderOf(root) {
 }
 
 function currentTabLabel(s) {
-  return EndpointPicker.sessionTabLabel(folderOf(s.root1), folderOf(s.root2));
+  return EndpointPicker.sessionDisplayName(s.name || '', folderOf(s.root1), folderOf(s.root2));
 }
 
 function ensureCommitsCollapsed() {
@@ -304,8 +314,20 @@ function init() {
     if (!picker.hidden && !picker.contains(e.target) && e.target !== endpoint1 && e.target !== endpoint2) {
       closePicker();
     }
+    if (tabMenu && !tabMenu.contains(e.target)) {
+      closeTabMenu();
+    }
+  });
+  document.addEventListener('contextmenu', (e) => {
+    if (tabMenu && !tabMenu.contains(e.target) && !sessionTabs.contains(e.target)) {
+      closeTabMenu();
+    }
   });
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && tabMenu) {
+      closeTabMenu();
+      return;
+    }
     if (e.key === 'Escape' && !picker.hidden) {
       closePicker();
     }
@@ -530,11 +552,17 @@ function togglePicker(side) {
 
 function openPicker(side) {
   pickerState.side = side;
-  const currentRoot = side === 1 ? state.root1 : state.root2;
-  if (currentRoot) {
+  // Carry the folder over from the other box, or from the last one you used.
+  const startRoot = EndpointPicker.pickerStartRoot(
+    side,
+    state.root1 || '',
+    state.root2 || '',
+    state.lastFolderRoot || ''
+  );
+  if (startRoot) {
     pickerState.step = 2;
-    pickerState.folderRoot = currentRoot;
-    pickerState.folderName = folderOf(currentRoot);
+    pickerState.folderRoot = startRoot;
+    pickerState.folderName = folderOf(startRoot);
   } else {
     pickerState.step = 1;
     pickerState.folderRoot = '';
@@ -639,6 +667,7 @@ function choosePickerItem(index) {
     pickerState.step = 2;
     pickerState.folderRoot = item.root;
     pickerState.folderName = item.folder;
+    state.lastFolderRoot = item.root;
     pickerSearch.value = '';
     renderPickerList();
     pickerSearch.focus();
@@ -648,6 +677,7 @@ function choosePickerItem(index) {
   if (peerId && item.id === peerId) {
     return;
   }
+  state.lastFolderRoot = item.root || pickerState.folderRoot || '';
   applyEndpointId(pickerState.side, item.id);
   closePicker();
   renderClosedButtons();
@@ -685,12 +715,16 @@ function renderTabs() {
   if (!sessionTabs) {
     return;
   }
+  closeTabMenu();
   sessionTabs.innerHTML = '';
-  (state.sessions || []).forEach((s) => {
+  (state.sessions || []).forEach((s, index) => {
     const tab = document.createElement('div');
     tab.className = 'session-tab' + (s.id === state.activeId ? ' active' : '');
     tab.setAttribute('role', 'tab');
+    tab.setAttribute('tabindex', '0');
+    tab.setAttribute('draggable', 'true');
     tab.setAttribute('aria-selected', s.id === state.activeId ? 'true' : 'false');
+    tab.title = 'Drag to reorder · double-click to rename · right-click for more';
     const name = document.createElement('span');
     name.className = 'session-tab-name';
     name.textContent = currentTabLabel(s);
@@ -708,6 +742,18 @@ function renderTabs() {
       tab.appendChild(close);
     }
     tab.addEventListener('click', () => switchSession(s.id));
+    tab.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startRename(tab, s);
+    });
+    tab.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openTabMenu(tab, s);
+    });
+    tab.addEventListener('keydown', (e) => onTabKey(e, index, s));
+    bindTabDrag(tab, index);
     sessionTabs.appendChild(tab);
   });
   const add = document.createElement('button');
@@ -717,6 +763,228 @@ function renderTabs() {
   add.textContent = '+';
   add.addEventListener('click', addSession);
   sessionTabs.appendChild(add);
+}
+
+/** Drag a tab onto either half of another to drop before or after it. */
+function bindTabDrag(tab, index) {
+  tab.addEventListener('dragstart', (e) => {
+    dragFrom = index;
+    tab.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(index));
+    }
+  });
+  tab.addEventListener('dragend', () => {
+    dragFrom = -1;
+    clearDropMarks();
+  });
+  tab.addEventListener('dragover', (e) => {
+    if (dragFrom < 0 || dragFrom === index) {
+      return;
+    }
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    clearDropMarks();
+    tab.classList.add(dropAfter(e, tab) ? 'drop-after' : 'drop-before');
+  });
+  tab.addEventListener('dragleave', () => tab.classList.remove('drop-before', 'drop-after'));
+  tab.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const from = dragFrom;
+    const after = dropAfter(e, tab);
+    dragFrom = -1;
+    clearDropMarks();
+    if (from < 0 || from === index) {
+      return;
+    }
+    let to = after ? index + 1 : index;
+    if (from < to) {
+      to -= 1;
+    }
+    moveTab(from, to);
+  });
+}
+
+function dropAfter(e, tab) {
+  const box = tab.getBoundingClientRect();
+  return e.clientX > box.left + box.width / 2;
+}
+
+function clearDropMarks() {
+  sessionTabs.querySelectorAll('.session-tab').forEach((el) => {
+    el.classList.remove('drop-before', 'drop-after');
+  });
+}
+
+function moveTab(from, to) {
+  const list = state.sessions || [];
+  if (from < 0 || to < 0 || from >= list.length || to >= list.length || from === to) {
+    return;
+  }
+  state.sessions = EndpointPicker.moveSession(list, from, to);
+  renderTabs();
+  flushSession();
+  const moved = sessionTabs.querySelectorAll('.session-tab')[to];
+  if (moved) {
+    moved.focus();
+  }
+}
+
+function onTabKey(e, index, s) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    switchSession(s.id);
+    return;
+  }
+  if (e.key === 'F2') {
+    e.preventDefault();
+    startRename(e.currentTarget, s);
+    return;
+  }
+  if (!e.ctrlKey || !e.shiftKey) {
+    return;
+  }
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    moveTab(index, index - 1);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    moveTab(index, index + 1);
+  }
+}
+
+/** Enter keeps the name, Esc drops it, an empty value restores folder · folder. */
+function startRename(tab, s) {
+  const name = tab.querySelector('.session-tab-name');
+  if (!name || tab.querySelector('.session-tab-rename')) {
+    return;
+  }
+  closeTabMenu();
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'session-tab-rename';
+  input.value = s.name || currentTabLabel(s);
+  input.setAttribute('aria-label', 'Rename tab');
+  tab.setAttribute('draggable', 'false');
+  name.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const finish = (commit) => {
+    if (done) {
+      return;
+    }
+    done = true;
+    if (commit) {
+      const typed = input.value.trim();
+      s.name = typed === currentTabLabel({ ...s, name: '' }) ? '' : typed;
+      flushSession();
+    }
+    renderTabs();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('dblclick', (e) => e.stopPropagation());
+  input.addEventListener('blur', () => finish(true));
+}
+
+function closeTabMenu() {
+  if (tabMenu) {
+    tabMenu.remove();
+    tabMenu = null;
+  }
+}
+
+function openTabMenu(tab, s) {
+  closeTabMenu();
+  const many = EndpointPicker.canCloseSession((state.sessions || []).length);
+  const index = (state.sessions || []).findIndex((x) => x.id === s.id);
+  const items = [
+    { label: 'Rename', run: () => startRename(tab, s) },
+    { label: 'Duplicate', run: () => duplicateTab(s.id) },
+    { label: 'Close', run: () => closeSession(s.id), off: !many },
+    { label: 'Close others', run: () => closeTabs('others', s.id), off: !many },
+    {
+      label: 'Close to the right',
+      run: () => closeTabs('right', s.id),
+      off: index < 0 || index >= (state.sessions || []).length - 1,
+    },
+  ];
+  const menu = document.createElement('div');
+  menu.className = 'tab-menu';
+  menu.setAttribute('role', 'menu');
+  items.forEach((item) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'tab-menu-item' + (item.off ? ' off' : '');
+    row.textContent = item.label;
+    row.disabled = Boolean(item.off);
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeTabMenu();
+      item.run();
+    });
+    menu.appendChild(row);
+  });
+  const box = tab.getBoundingClientRect();
+  menu.style.left = `${Math.max(2, Math.round(box.left))}px`;
+  menu.style.top = `${Math.round(box.bottom + 2)}px`;
+  document.body.appendChild(menu);
+  tabMenu = menu;
+  const width = menu.getBoundingClientRect().width;
+  if (box.left + width > window.innerWidth) {
+    menu.style.left = `${Math.max(2, Math.round(window.innerWidth - width - 4))}px`;
+  }
+}
+
+function duplicateTab(id) {
+  snapshotActive();
+  const next = EndpointPicker.duplicateSession(state.sessions || [], id, newSessionId());
+  if (next.length === (state.sessions || []).length) {
+    return;
+  }
+  state.sessions = next;
+  renderTabs();
+  flushSession();
+}
+
+function closeTabs(mode, id) {
+  snapshotActive();
+  const result = EndpointPicker.closeSessions(state.sessions || [], state.activeId, mode, id);
+  if (result.sessions.length === (state.sessions || []).length) {
+    return;
+  }
+  const switched = result.activeId !== state.activeId;
+  state.sessions = result.sessions;
+  if (switched) {
+    const next = result.sessions.find((x) => x.id === result.activeId);
+    if (next) {
+      applySession(next);
+    }
+  }
+  renderTabs();
+  renderClosedButtons();
+  updateSideTitles();
+  flushSession();
+  if (switched && state.root1 && state.root2 && state.ref1 && state.ref2) {
+    loadDiff();
+  } else if (switched) {
+    fileTree.innerHTML = '<div class="empty-state">Pick two unique endpoints</div>';
+  }
 }
 
 function switchSession(id) {

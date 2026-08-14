@@ -102,12 +102,18 @@ Marketplace id once published: `RicardoFrantz.diff-next`.
 
 1. Click **vscode-diff Next** in the activity bar.
 2. Use **tabs** to keep more than one compare open (`+` adds a tab; each tab
-   is one pair).
+   is one pair). Drag a tab to reorder the strip, or `Ctrl+Shift+←` / `→` from
+   the keyboard — the order is remembered. Double-click (or `F2`) renames a tab;
+   clearing the name restores the `folder · folder` label. Right-click for
+   Rename, Duplicate, Close, Close others, and Close to the right.
 3. Pick each side with the **folder-then-branch** picker: click a target,
    choose a workspace folder (type to filter), then a **local** branch of
-   that folder. Reopening a side that already has a folder starts on its
-   branches; `←` goes back to folders. Remotes are hidden. The two sides
-   can never be the same endpoint.
+   that folder. A side that already has a folder starts on its branches, and so
+   does the **second** box once the first one has a folder — comparing two
+   branches of one repo is two clicks. `←` goes back to folders, and an explicit
+   folder on that side is never overridden. A new tab starts on the folder you
+   were last in. Remotes are hidden. The two sides can never be the same
+   endpoint.
 4. Click a **Modified (M)** file for a side-by-side diff; **Renamed (R)** diffs
    the old path against the new one. Under the two targets, **Compare view**
    has independent on/off toggles (Wrap, Ignore spaces, Two columns, Fold
@@ -121,10 +127,30 @@ Marketplace id once published: `RicardoFrantz.diff-next`.
 
 Command Palette: **vscode-diff Next: Compare Branches** (editor-area panel).
 
-To leave a note for an agent: select text in the compare, right-click
-**vscode-diff Next: Comment selection for agent**, and type the note.
-Each comment is written to `.diff-next/comments/` in that repo. The
-combined file to hand an agent is `.diff-next/review.json`.
+To leave a note for Claude / Codex: select text in the compare or in any file
+on disk. A strip opens on those lines: **Save**, then the five tags
+(**fix** **improve** **explain** **re-check** **discuss**, with `fix` armed),
+then **Delete**. Type the note — the armed tag rides in the box as `{fix}` —
+and press Enter. Esc discards it. Clicking anywhere outside the selection hands
+the keyboard straight back to the editor.
+
+A saved range turns **amber**: the text is washed, the gutter gets a rail, the
+scrollbar gets a mark, and a `{fix}` chip sits at the end of the range. It
+reads on top of the green of an added line, so you can see at a glance which
+parts of a diff you have already been through. Hover the amber to read the note
+or delete it. The first save creates `myfile-rev.json` next to `myfile.md`.
+Later notes append to the same file:
+
+```json
+[
+  {
+    "selected_text": "the highlighted code\ncan span lines",
+    "range": "42-45",
+    "tag": "fix",
+    "comment": "your note"
+  }
+]
+```
 
 ### Per-change revert arrows (like VS Code's own diff)
 
